@@ -111,7 +111,7 @@ The architecture is designed to be:
      │ React Frontend  │          │ FastAPI Backend │
      │ TypeScript/Vite │          │    REST API     │
      └─────────────────┘          └───────┬─────────┘
-                                            │
+                                          │
                     ┌─────────────────────┼──────────────────┐
                     │                     │                  │
                     ▼                     ▼                  ▼
@@ -119,29 +119,29 @@ The architecture is designed to be:
              │ PostgreSQL │       │ Qwen AI      │   │ Background  │
              │            │       │ Local Model  │   │ Tasks       │
              └────────────┘       └──────────────┘   └─────────────┘
-                                         ▲
+                                          ▲
                                           │
                               AI Context Layer
                                           │
                                           │ 
-                    HTTPS REST API         │
-                       ▲                   │
-                       │                   │
-┌──────────────────────┴───────────────────┘
+                    HTTPS REST API        │
+                       ▲                  │
+                       │                  │
+┌──────────────────────┴──────────────────┘
 │
 │
 ┌──────────────────────────────────────────────────────┐
-│                    CyberShield Agents                 │
-├──────────────┬──────────────┬──────────────┬─────────┤
-▼              ▼              ▼              ▼         ▼
-┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────┐
-│ CyberShield│ │CyberShield │ │CyberShield │ │  ...   │
-│ Agent #1   │ │ Agent #2   │ │ Agent #3   │ │Agent #N│
-└─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └───┬────┘
-      │               │               │            │
-      ▼               ▼               ▼            ▼
-   Local         Local          Local         Local
- Network       Network        Network       Network
+│                    CyberShield Agents                │
+├───────────────────┬──────────────┬─────────┬─────────┤
+▼                   ▼              ▼         ▼         ▼
+┌────────────┐ ┌────────────┐ ┌────────────┐    ┌────────┐
+│ CyberShield│ │CyberShield │ │CyberShield │... │        │
+│ Agent #1   │ │ Agent #2   │ │ Agent #3   │    │Agent #N│
+└─────┬──────┘ └─────┬──────┘ └─────┬──────┘    └───┬────┘
+      │              │              │               │
+      ▼              ▼              ▼               ▼
+   Local         Local          Local             Local
+ Network       Network        Network            Network
 ```
 
 ### 4.1 Architecture Layers
