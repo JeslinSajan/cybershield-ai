@@ -131,17 +131,17 @@ The architecture is designed to be:
 │
 │
 ┌──────────────────────────────────────────────────────┐
-│                    CyberShield Agents                 │
-├──────────────┬──────────────┬──────────────┬─────────┤
-▼              ▼              ▼              ▼         ▼
-┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────┐
-│ CyberShield│ │CyberShield │ │CyberShield │ │  ...   │
-│ Agent #1   │ │ Agent #2   │ │ Agent #3   │ │Agent #N│
-└─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └───┬────┘
-      │               │               │            │
-      ▼               ▼               ▼            ▼
-   Local         Local          Local         Local
- Network       Network        Network       Network
+│                    CyberShield Agents                │
+├───────────────────┬──────────────┬─────────┬─────────┤
+▼                   ▼              ▼         ▼         ▼
+┌────────────┐ ┌────────────┐ ┌────────────┐    ┌────────┐
+│ CyberShield│ │CyberShield │ │CyberShield │... │        │
+│ Agent #1   │ │ Agent #2   │ │ Agent #3   │    │Agent #N│
+└─────┬──────┘ └─────┬──────┘ └─────┬──────┘    └───┬────┘
+      │              │              │               │
+      ▼              ▼              ▼               ▼
+   Local         Local          Local             Local
+ Network       Network        Network            Network
 ```
 
 ### 4.1 Architecture Layers
