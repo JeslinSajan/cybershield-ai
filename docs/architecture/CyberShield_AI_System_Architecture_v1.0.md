@@ -111,7 +111,7 @@ The architecture is designed to be:
      │ React Frontend  │          │ FastAPI Backend │
      │ TypeScript/Vite │          │    REST API     │
      └─────────────────┘          └───────┬─────────┘
-                                            │
+                                          │
                     ┌─────────────────────┼──────────────────┐
                     │                     │                  │
                     ▼                     ▼                  ▼
@@ -119,15 +119,15 @@ The architecture is designed to be:
              │ PostgreSQL │       │ Qwen AI      │   │ Background  │
              │            │       │ Local Model  │   │ Tasks       │
              └────────────┘       └──────────────┘   └─────────────┘
-                                         ▲
+                                          ▲
                                           │
                               AI Context Layer
                                           │
                                           │ 
-                    HTTPS REST API         │
-                       ▲                   │
-                       │                   │
-┌──────────────────────┴───────────────────┘
+                    HTTPS REST API        │
+                       ▲                  │
+                       │                  │
+┌──────────────────────┴──────────────────┘
 │
 │
 ┌──────────────────────────────────────────────────────┐
