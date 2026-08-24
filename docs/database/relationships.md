@@ -42,6 +42,8 @@ Rule: users are human actors only. Agent identity is stored separately and never
 
 Rule: Agent credential storage is a separate table from the user table. This matches the SRS requirement that the Agent is not a user role and cannot access user endpoints or the database directly.
 
+Identity rule: the stable Agent identity is `agents.id`; `hostname` is not unique and is treated as mutable metadata. This avoids accidental collisions when multiple authorized hosts share a hostname, when a machine is renamed, or when a VM is cloned.
+
 ### Discovery and vulnerability pipeline
 
 - scans 1:N scan_results

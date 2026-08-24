@@ -96,7 +96,7 @@ Purpose: authorized host-side agents.
 | id | UUID | PK | |
 | organization_id | UUID | FK -> organizations.id, NOT NULL | Org ownership |
 | name | VARCHAR(120) | NOT NULL | Friendly label |
-| hostname | VARCHAR(120) | NULL | Hostname from the machine |
+| hostname | VARCHAR(120) | NULL | Hostname from the machine; not unique by design |
 | status | VARCHAR(20) | NOT NULL DEFAULT 'PENDING' | PENDING, ONLINE, OFFLINE |
 | version | VARCHAR(50) | NULL | Agent version |
 | last_heartbeat_at | TIMESTAMPTZ | NULL | |
@@ -105,7 +105,9 @@ Purpose: authorized host-side agents.
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
 | deleted_at | TIMESTAMPTZ | NULL | Soft delete |
 
-Indexes: `idx_agents_org_status`, `idx_agents_last_heartbeat`, `idx_agents_active`. Unique: maybe `(organization_id, hostname)` where hostname present.
+Indexes: `idx_agents_org_status`, `idx_agents_last_heartbeat`, `idx_agents_active`.
+
+Note: `hostname` is intentionally not unique. Hostnames can be reused, can change after a system rename, and are not a stable identity for an Agent. The stable identity is the UUID `id` on the `agents` table; all foreign-key references and audit records point to that agent_id.
 
 ## 7. agent_credentials
 
