@@ -251,7 +251,7 @@ Recorded here so they are not silently designed-in nor silently lost:
 - Public threat-intelligence feed integration (beyond local indicator
   data)
 - Windows Event Log collection (Linux log collection is the MVP target)
-- Oracle Cloud deployment of the same Docker Compose stack
+- Microsoft Azure VM deployment (12-month free tier, B1S instance) of the same Docker Compose stack
 
 ---
 

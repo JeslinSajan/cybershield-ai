@@ -28,17 +28,18 @@ The local environment assumes Python, Node.js, PostgreSQL 14+, and Nmap are avai
 
 ## Future - Phase 24+
 
-This is a packaging and hosting option, not the current MVP topology. A future cloud phase may deploy the same four application components with Docker Compose on a single cloud VM. An optional Nginx reverse proxy may then provide a public entry point and TLS termination.
+This is a packaging and hosting option, not the current MVP topology. A future cloud phase will deploy the same four application components with Docker Compose on a single Microsoft Azure VM (12-month free tier, B1S instance, Linux). An optional Nginx reverse proxy may then provide a public entry point and TLS termination.
 
 ```text
-Future single cloud VM (Phase 24+)
+Future Azure VM deployment (Phase 24+)
 +---------------------------------------------------------------+
-| Nginx (optional edge entry point)                             |
-|   |                                                           |
-|   +--> React static assets                                    |
-|   +--> FastAPI application --> PostgreSQL                     |
+| Azure VM (B1S, Linux)                                         |
+|   Nginx (optional edge entry point)                           |
+|     |                                                         |
+|     +--> React static assets                                  |
+|     +--> FastAPI application --> PostgreSQL                   |
 |                                                               |
-| CyberShield Agent connects to the FastAPI Agent API           |
+|   CyberShield Agent connects to the FastAPI Agent API         |
 +---------------------------------------------------------------+
 ```
 
