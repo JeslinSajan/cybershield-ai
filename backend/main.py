@@ -4,7 +4,7 @@ Minimal FastAPI app to verify Vercel + Render + Neon connectivity
 """
 import os
 from fastapi import FastAPI
-import asyncpg
+import psycopg
 
 app = FastAPI(title="CyberShield AI Smoke Test", version="0.0.1-smoke-test")
 
@@ -27,22 +27,22 @@ async def health_db():
         }
     
     try:
-        conn = await asyncpg.connect(database_url)
+        conn = psycopg.connect(database_url)
         
         # Query the smoke test table
-        result = await conn.fetchrow(
-            "SELECT id, timestamp FROM _healthcheck LIMIT 1"
-        )
-        
-        await conn.close()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, timestamp FROM _healthcheck LIMIT 1")
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
         
         if result:
             return {
                 "status": "healthy",
                 "database": "connected",
                 "test_row": {
-                    "id": result["id"],
-                    "timestamp": str(result["timestamp"])
+                    "id": result[0],
+                    "timestamp": str(result[1])
                 }
             }
         else:
