@@ -18,6 +18,12 @@ export default {
           danger: '#ef4444',  // Red
           critical: '#dc2626', // Dark red
           offline: '#6b7280', // Gray
+        },
+        navy: '#0b1120',
+        slate: {
+          850: '#151e2e',
+          900: '#0f172a',
+          950: '#020617',
         }
       }
     },
