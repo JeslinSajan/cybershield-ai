@@ -1,11 +1,9 @@
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Table } from '../components/ui/Table';
-import { demoVulnerabilities } from '../lib/demoData';
+import { vulnerabilities } from '../lib/demoData';
 
 export function Vulnerabilities() {
-  const vulnerabilities = demoVulnerabilities;
-
   const tableHeaders = ['Severity', 'Score', 'Description', 'Recommendation', 'Status', 'Created'];
   const tableRows = vulnerabilities.map(vuln => [
     <Badge severity={vuln.severity}>{vuln.severity}</Badge>,
@@ -26,7 +24,16 @@ export function Vulnerabilities() {
       </div>
 
       <Card>
-        <Table headers={tableHeaders} rows={tableRows} />
+        {vulnerabilities.length > 0 ? (
+          <Table headers={tableHeaders} rows={tableRows} />
+        ) : (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <p className="text-gray-400 text-lg">No vulnerabilities found</p>
+              <p className="text-gray-500 text-sm mt-2">Run a vulnerability scan to detect security issues</p>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

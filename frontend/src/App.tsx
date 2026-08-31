@@ -1,7 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopBar } from './components/layout/TopBar'
-import { DemoBanner } from './components/layout/DemoBanner'
 import { Dashboard } from './pages/Dashboard'
 import { Agents } from './pages/Agents'
 import { Devices } from './pages/Devices'
@@ -16,7 +15,6 @@ import { Settings } from './pages/Settings'
 function App() {
   return (
     <div className="flex flex-col h-screen bg-soc-bg">
-      <DemoBanner />
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />

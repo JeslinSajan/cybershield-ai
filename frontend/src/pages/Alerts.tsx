@@ -1,11 +1,9 @@
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Table } from '../components/ui/Table';
-import { demoAlerts } from '../lib/demoData';
+import { alerts } from '../lib/demoData';
 
 export function Alerts() {
-  const alerts = demoAlerts;
-
   const tableHeaders = ['Type', 'Severity', 'Status', 'Description', 'Risk Score', 'Triggered', 'Device'];
   const tableRows = alerts.map(alert => [
     <span className="text-gray-300 capitalize">{alert.alert_type.replace('_', ' ')}</span>,
@@ -43,7 +41,16 @@ export function Alerts() {
       </div>
 
       <Card>
-        <Table headers={tableHeaders} rows={tableRows} />
+        {alerts.length > 0 ? (
+          <Table headers={tableHeaders} rows={tableRows} />
+        ) : (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <p className="text-gray-400 text-lg">No alerts</p>
+              <p className="text-gray-500 text-sm mt-2">Alerts will appear here when security events are detected</p>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

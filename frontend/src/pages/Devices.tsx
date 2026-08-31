@@ -1,11 +1,9 @@
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Table } from '../components/ui/Table';
-import { demoDevices } from '../lib/demoData';
+import { devices } from '../lib/demoData';
 
 export function Devices() {
-  const devices = demoDevices;
-
   const tableHeaders = ['Hostname', 'IP Address', 'MAC Address', 'Vendor', 'Type', 'Status', 'Last Seen'];
   const tableRows = devices.map(device => [
     <span className="font-semibold text-white">{device.hostname}</span>,
@@ -29,7 +27,16 @@ export function Devices() {
       </div>
 
       <Card>
-        <Table headers={tableHeaders} rows={tableRows} />
+        {devices.length > 0 ? (
+          <Table headers={tableHeaders} rows={tableRows} />
+        ) : (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <p className="text-gray-400 text-lg">No devices discovered</p>
+              <p className="text-gray-500 text-sm mt-2">Run a discovery scan to find devices on your network</p>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

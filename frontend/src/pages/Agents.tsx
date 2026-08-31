@@ -1,11 +1,9 @@
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Table } from '../components/ui/Table';
-import { demoAgents } from '../lib/demoData';
+import { agents } from '../lib/demoData';
 
 export function Agents() {
-  const agents = demoAgents;
-
   const tableHeaders = ['Name', 'Hostname', 'Status', 'Version', 'Last Heartbeat', 'Created'];
   const tableRows = agents.map(agent => [
     <span className="font-semibold text-white">{agent.name}</span>,
@@ -28,7 +26,16 @@ export function Agents() {
       </div>
 
       <Card>
-        <Table headers={tableHeaders} rows={tableRows} />
+        {agents.length > 0 ? (
+          <Table headers={tableHeaders} rows={tableRows} />
+        ) : (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <p className="text-gray-400 text-lg">No agents registered</p>
+              <p className="text-gray-500 text-sm mt-2">Register an agent to start monitoring</p>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );
