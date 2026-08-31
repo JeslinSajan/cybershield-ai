@@ -1,68 +1,39 @@
-import { useState, useEffect } from 'react'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-
-interface HealthResponse {
-  status: string
-}
-
-interface HealthDbResponse {
-  status: string
-  database?: string
-  message?: string
-  test_row?: {
-    id: number
-    timestamp: string
-  }
-}
+import { Routes, Route } from 'react-router-dom'
+import { Sidebar } from './components/layout/Sidebar'
+import { TopBar } from './components/layout/TopBar'
+import { DemoBanner } from './components/layout/DemoBanner'
+import { Dashboard } from './pages/Dashboard'
+import { Agents } from './pages/Agents'
+import { Devices } from './pages/Devices'
+import { Vulnerabilities } from './pages/Vulnerabilities'
+import { Alerts } from './pages/Alerts'
+import { Logs } from './pages/Logs'
+import { ThreatIntelligence } from './pages/ThreatIntelligence'
+import { Reports } from './pages/Reports'
+import { AIAssistant } from './pages/AIAssistant'
+import { Settings } from './pages/Settings'
 
 function App() {
-  const [healthStatus, setHealthStatus] = useState<string>('Loading...')
-  const [dbStatus, setDbStatus] = useState<string>('Loading...')
-  const [dbDetails, setDbDetails] = useState<string>('')
-
-  useEffect(() => {
-    // Call backend health endpoints
-    const checkHealth = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/health`)
-        const data: HealthResponse = await response.json()
-        setHealthStatus(data.status)
-      } catch (error) {
-        setHealthStatus(`Error: ${error}`)
-      }
-    }
-
-    const checkDbHealth = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/health/db`)
-        const data: HealthDbResponse = await response.json()
-        setDbStatus(data.status)
-        setDbDetails(JSON.stringify(data, null, 2))
-      } catch (error) {
-        setDbStatus(`Error: ${error}`)
-      }
-    }
-
-    checkHealth()
-    checkDbHealth()
-  }, [])
-
   return (
-    <div style={{ padding: '20px', fontFamily: 'monospace' }}>
-      <h1>CyberShield AI - Deployment Smoke Test</h1>
-      
-      <div style={{ marginBottom: '20px' }}>
-        <h2>Backend Health Check</h2>
-        <p>Status: {healthStatus}</p>
-      </div>
-
-      <div>
-        <h2>Database Health Check</h2>
-        <p>Status: {dbStatus}</p>
-        <pre style={{ background: '#f0f0f0', padding: '10px' }}>
-          {dbDetails}
-        </pre>
+    <div className="flex flex-col h-screen bg-soc-bg">
+      <DemoBanner />
+      <TopBar />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/agents" element={<Agents />} />
+            <Route path="/devices" element={<Devices />} />
+            <Route path="/vulnerabilities" element={<Vulnerabilities />} />
+            <Route path="/alerts" element={<Alerts />} />
+            <Route path="/logs" element={<Logs />} />
+            <Route path="/threat-intelligence" element={<ThreatIntelligence />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/ai-assistant" element={<AIAssistant />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </main>
       </div>
     </div>
   )
