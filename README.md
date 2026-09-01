@@ -29,7 +29,14 @@ cybershield-ai/
 
 ## Getting Started
 
-[Installation and setup instructions will be added]
+For detailed local development setup instructions, see [docs/deployment/local-development.md](docs/deployment/local-development.md).
+
+### Quick Start
+
+1. Clone the repository
+2. Set up a Neon PostgreSQL database
+3. Follow the local development guide to run backend and frontend
+4. Access the dashboard at `http://localhost:5173`
 
 ## License
 
