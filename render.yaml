@@ -2,7 +2,7 @@ services:
   - type: web
     name: cybershield-ai-backend
     runtime: python
-    runtimeVersion: 3.13.7
+    runtimeVersion: 3.12
     buildCommand: pip install -r backend/requirements.txt
     startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     workingDirectory: backend
