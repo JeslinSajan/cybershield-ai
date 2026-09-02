@@ -30,20 +30,12 @@ def configure_logging():
                 "level": log_level,
                 "formatter": "standard",
                 "stream": "ext://sys.stdout"
-            },
-            "file": {
-                "class": "logging.handlers.RotatingFileHandler",
-                "level": log_level,
-                "formatter": "detailed",
-                "filename": "logs/cybershield.log",
-                "maxBytes": 10485760,  # 10MB
-                "backupCount": 5
             }
         },
         "loggers": {
             "app": {
                 "level": log_level,
-                "handlers": ["console", "file"],
+                "handlers": ["console"],
                 "propagate": False
             },
             "uvicorn": {

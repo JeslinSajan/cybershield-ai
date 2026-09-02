@@ -26,7 +26,7 @@ def get_engine():
             echo=settings.DEBUG,
             future=True
         )
-        logger.info(f"Database engine created for {settings.DATABASE_URL}")
+        logger.info("Database engine created successfully")
     return _engine
 
 
