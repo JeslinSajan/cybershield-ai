@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.core.database import init_db, close_db, test_db_connection
+from app.core.database import init_db, close_db
 from app.core.logging import configure_logging
 from app.core.exceptions import CyberShieldException, ErrorResponse
 from app.api.v1.router import router as api_v1_router
@@ -50,16 +50,10 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
     
-    # Initialize database
+    # Initialize database engine (no network call, just creates the engine object)
     init_db()
     logger.info("Database engine initialized")
-    
-    # Test database connection
-    db_ok = await test_db_connection()
-    if db_ok:
-        logger.info("✓ Database connectivity verified")
-    else:
-        logger.warning("✗ Database connectivity check failed (will retry on first request)")
+    logger.info("Database connectivity will be verified on first request via /api/v1/health/db")
     
     logger.info(f"{settings.APP_NAME} startup complete")
     
