@@ -68,7 +68,7 @@ Create a `.env` file in the `backend/` directory:
 DATABASE_URL=sqlite:///./cybershield_test.db
 
 # For Neon PostgreSQL (production)
-# DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require
+# DATABASE_URL=postgresql+psycopg://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require
 
 # Application settings
 ENVIRONMENT=development
@@ -314,7 +314,7 @@ The backend is deployed on Render.com using:
 
 Set these in the Render dashboard:
 ```
-DATABASE_URL=postgresql://user:password@host/database?sslmode=require
+DATABASE_URL=postgresql+psycopg://user:password@host/database?sslmode=require
 ENVIRONMENT=production
 DEBUG=False
 JWT_SECRET_KEY=<strong-random-key>
@@ -460,7 +460,7 @@ Copy-Item .env.example .env
 
 Edit `backend/.env` and replace `DATABASE_URL` with your actual Neon connection string:
 ```env
-DATABASE_URL=postgresql://your-username:your-password@ep-xxx.region.aws.neon.tech/your-database?sslmode=require
+DATABASE_URL=postgresql+psycopg://your-username:your-password@ep-xxx.region.aws.neon.tech/your-database?sslmode=require
 ```
 
 ### 5. Run Backend Server

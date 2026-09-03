@@ -13,15 +13,33 @@ _engine = None
 _SessionLocal = None
 
 
+def _normalize_db_url(url: str) -> str:
+    """
+    Normalize the database URL to use the psycopg (v3) driver explicitly.
+
+    SQLAlchemy defaults to psycopg2 when it sees "postgresql://".
+    This project installs psycopg (v3) via psycopg[binary], not psycopg2.
+    Neon and most PostgreSQL providers give connection strings with the
+    plain "postgresql://" scheme, so we rewrite it here in code rather
+    than requiring every environment (.env, Render dashboard, CI) to
+    remember to use the correct dialect prefix.
+    """
+    if url.startswith("postgresql://") and not url.startswith("postgresql+"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    # Also handle "postgres://" (short alias sometimes used by Heroku/Neon)
+    if url.startswith("postgres://") and not url.startswith("postgres+"):
+        return url.replace("postgres://", "postgresql+psycopg://", 1)
+    return url
+
+
 def get_engine():
     """Get or create database engine from settings."""
     global _engine
     if _engine is None:
         settings = get_settings()
-        # Use StaticPool for testing, NullPool for production
-        # NullPool is better for serverless and avoids connection leaks
+        db_url = _normalize_db_url(settings.DATABASE_URL)
         _engine = create_engine(
-            settings.DATABASE_URL,
+            db_url,
             pool_pre_ping=True,
             echo=settings.DEBUG,
             future=True
