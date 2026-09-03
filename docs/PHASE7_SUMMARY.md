@@ -412,3 +412,78 @@ baseline.
 | `ac9c965` | Run diagnostic before startup to capture crash reason in Render logs |
 | `a419ba7` | Remove blocking DB test from lifespan (Render startup timeout fix) |
 | `4c0ba76` | Normalize DATABASE_URL to use psycopg v3 dialect explicitly |
+
+---
+
+## 7. Test Suite Results (Phase 7 Baseline)
+
+Run: `python -m pytest tests/test_backend_foundation.py -v`
+
+**19 tests — all passing at Phase 7 completion**
+
+| Group | Test | Result |
+|-------|------|--------|
+| Configuration | test_settings_loaded | ✅ |
+| Configuration | test_required_settings | ✅ |
+| Configuration | test_app_name | ✅ |
+| Configuration | test_app_version | ✅ |
+| Database Layer | test_database_connection | ✅ |
+| Database Layer | test_models_imported | ✅ |
+| Database Layer | test_metadata_tables_count (25/25) | ✅ |
+| Database Layer | test_expected_tables_exist | ✅ |
+| Application | test_app_imports | ✅ |
+| Application | test_app_title | ✅ |
+| Application | test_app_version | ✅ |
+| Application | test_app_routes_exist | ✅ |
+| Schemas | test_health_response_schema | ✅ |
+| Schemas | test_health_db_response_schema | ✅ |
+| Schemas | test_root_response_schema | ✅ |
+| Error Handling | test_exceptions_import | ✅ |
+| Error Handling | test_validation_exception | ✅ |
+| Logging | test_logging_import | ✅ |
+| Logging | test_get_logger | ✅ |
+
+---
+
+## 8. Environment Variable Reference
+
+| Variable | Required | Default | Notes |
+|----------|----------|---------|-------|
+| `DATABASE_URL` | ✅ Yes | — | Must be set in Render dashboard |
+| `ENVIRONMENT` | No | `development` | Set to `production` on Render |
+| `DEBUG` | No | `True` | Set to `False` on Render |
+| `LOG_LEVEL` | No | `INFO` | |
+| `CORS_ORIGINS` | No | None (all allowed in dev) | Set Vercel URL in production |
+| `JWT_SECRET_KEY` | No | `dev-secret-key-...` | **Change in production — Phase 8** |
+| `JWT_ALGORITHM` | No | `HS256` | Phase 8 |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | `30` | Phase 8 |
+
+Local development `.env` minimum:
+```env
+DATABASE_URL=sqlite:///./cybershield_test.db
+ENVIRONMENT=development
+DEBUG=True
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+```
+
+---
+
+## 9. Files Created or Modified in Phase 7
+
+| Action | File |
+|--------|------|
+| CREATED | `backend/app/core/exceptions.py` |
+| CREATED | `backend/app/core/logging.py` |
+| CREATED | `backend/app/schemas/base.py` |
+| CREATED | `backend/app/schemas/__init__.py` |
+| CREATED | `backend/app/api/v1/health.py` |
+| CREATED | `backend/app/api/v1/router.py` + all placeholder routers |
+| CREATED | `backend/alembic/versions/001_initial_schema.py` |
+| CREATED | `backend/app/models/` (all 10 model files) |
+| CREATED | `tests/test_backend_foundation.py` |
+| ENHANCED | `backend/app/main.py` (lifespan, CORS, exception handlers) |
+| ENHANCED | `backend/app/core/config.py` (Pydantic v2 Settings) |
+| ENHANCED | `backend/app/core/database.py` (singleton, psycopg dialect fix) |
+| ENHANCED | `docs/deployment/local-development.md` |
+| UPDATED | `backend/requirements.txt` |
+| UPDATED | `backend/.env.example` |
