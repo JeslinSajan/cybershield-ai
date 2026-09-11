@@ -1,19 +1,21 @@
 """
-CyberShield AI Backend - FastAPI Application Foundation
+CyberShield AI Backend - FastAPI Application
 
 Phase 7: Backend infrastructure and database foundation
+Phase 8: Authentication, RBAC, user management
 - Configuration management
 - Database connectivity
 - API v1 router structure
 - Health check endpoints
 - Error handling
 - Structured logging
+- JWT authentication and role-based access control
 """
 
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,6 +23,7 @@ from app.core.config import get_settings
 from app.core.database import init_db, close_db
 from app.core.logging import configure_logging
 from app.core.exceptions import CyberShieldException, ErrorResponse
+from app.core.seed import seed_roles_and_admin
 from app.api.v1.router import router as api_v1_router
 from app.schemas import RootResponse
 
@@ -54,7 +57,15 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database engine initialized")
     logger.info("Database connectivity will be verified on first request via /api/v1/health/db")
-    
+
+    # Seed canonical roles and default admin (idempotent — safe on every restart)
+    # SECURITY: SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are never logged inside seed.py
+    try:
+        seed_roles_and_admin(settings)
+    except Exception as e:
+        # Seeding failure is non-fatal — log the error type, not credential values
+        logger.error(f"Seeding error on startup ({type(e).__name__}) — app will continue")
+
     logger.info(f"{settings.APP_NAME} startup complete")
     
     yield
@@ -102,6 +113,29 @@ else:
 
 
 # Exception handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle FastAPI HTTPExceptions.
+    
+    If the exception's detail is a dict with an 'error' key (our standard format),
+    return it directly. Otherwise wrap it in a standard error envelope.
+    This ensures all error responses have a consistent shape: {"error": {...}}
+    """
+    if isinstance(exc.detail, dict) and "error" in exc.detail:
+        # Already in our canonical format — return as-is
+        content = exc.detail
+    else:
+        content = {
+            "error": {
+                "code": f"HTTP_{exc.status_code}",
+                "message": str(exc.detail) if exc.detail else "An error occurred.",
+                "details": [],
+            }
+        }
+    headers = getattr(exc, "headers", None)
+    return JSONResponse(status_code=exc.status_code, content=content, headers=headers)
+
+
 @app.exception_handler(CyberShieldException)
 async def cybershield_exception_handler(request: Request, exc: CyberShieldException):
     """Handle CyberShield-specific exceptions."""

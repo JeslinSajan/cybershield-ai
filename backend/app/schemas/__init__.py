@@ -9,13 +9,31 @@ from app.schemas.base import (
     ListResponse,
     CreatedResponse
 )
+from app.schemas.auth import LoginRequest, LoginResponse, MeResponse, UserInToken
+from app.schemas.user import (
+    UserResponse,
+    UserCreateRequest,
+    UserUpdateRequest,
+    UserDeactivateResponse,
+)
 
 __all__ = [
+    # Base
     "ErrorDetail",
     "HealthResponse",
     "HealthDatabaseResponse",
     "RootResponse",
     "PaginationParams",
     "ListResponse",
-    "CreatedResponse"
+    "CreatedResponse",
+    # Auth
+    "LoginRequest",
+    "LoginResponse",
+    "MeResponse",
+    "UserInToken",
+    # Users
+    "UserResponse",
+    "UserCreateRequest",
+    "UserUpdateRequest",
+    "UserDeactivateResponse",
 ]

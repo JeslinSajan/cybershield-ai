@@ -1,6 +1,6 @@
 # Local Development Setup - CyberShield AI Backend
 
-## Phase 7 Foundation Documentation
+## Phase 8 Authentication & RBAC
 
 This document describes how to set up and run the CyberShield AI backend locally for development and testing.
 
@@ -51,13 +51,14 @@ cd backend
 pip install -r requirements.txt
 ```
 
-The key dependencies are:
 - **FastAPI** 0.104.1 - Web framework
 - **SQLAlchemy** 2.0.36 - ORM
 - **Alembic** 1.14.0 - Database migrations
 - **Uvicorn** 0.24.0 - ASGI server
 - **Pydantic** 2.5.0+ - Data validation
 - **psycopg** 3.2.13 - PostgreSQL driver
+- **passlib[bcrypt]** - Password hashing
+- **python-jose** - JWT generation and validation
 
 ### 4. Configure Environment Variables
 
@@ -84,6 +85,11 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 JWT_SECRET_KEY=dev-secret-key-change-in-production
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Initial Admin Seeding (for Phase 8)
+SEED_ADMIN_EMAIL=admin@cybershield.local
+SEED_ADMIN_PASSWORD=SecurePass123!
+SEED_ADMIN_USERNAME=admin
 ```
 
 **Important**: Do NOT commit `.env` to Git. Use `.env.example` as a template.
@@ -151,6 +157,17 @@ alembic upgrade head
 ```
 
 This creates all 25 tables defined in the schema.
+
+### Seed the Database (Phase 8)
+
+Before you can log in, you must seed the initial canonical roles and an Administrator account:
+
+```bash
+cd backend
+python -m app.core.seed
+```
+
+This will create the "Administrator", "Security Analyst", and "Viewer" roles, and an initial user based on your `SEED_ADMIN_*` environment variables.
 
 ### View Current Database Status
 
@@ -226,24 +243,19 @@ Run the test suite:
 
 ```bash
 cd backend
-python -m pytest ../tests/test_backend_foundation.py -v
+python -m pytest ../tests/test_backend_foundation.py ../tests/test_auth.py ../tests/test_rbac.py -v
 ```
 
 ### Test Results
 
-Foundation tests verify (19 tests total):
-- Configuration loading
-- Database connectivity
-- SQLAlchemy model imports
-- All 25 tables defined correctly
-- API router structure
-- Pydantic schemas
-- Error handling
-- Logging
+Tests verify:
+- Foundation (configuration, db connectivity, schemas)
+- Authentication (login, jwt issuance, lockout policy, `/auth/me`, logout)
+- RBAC (token validation, viewer/analyst/admin restrictions, last-admin protection)
 
 Expected output:
 ```
-============================= 19 passed in 0.91s ==============================
+============================= 57 passed in 3.12s ==============================
 ```
 
 ## Project Structure
@@ -416,25 +428,20 @@ python -m uvicorn app.main:app --port 8001
    git push origin feature/my-feature
 ```
 
-## Phase 7 Summary
+## Phase 8 Summary
 
 This phase establishes:
-- ✅ FastAPI application foundation
-- ✅ SQLAlchemy ORM with 25 tables
-- ✅ Alembic database migrations
-- ✅ Health check endpoints
-- ✅ Configuration management
-- ✅ Error handling infrastructure
-- ✅ Structured logging
-- ✅ API router structure
-- ✅ Foundation test suite
-- ✅ Local development environment
+- ✅ JWT Authentication endpoints
+- ✅ Bcrypt password hashing
+- ✅ Role-Based Access Control (RBAC) dependency factories
+- ✅ Account lockout policy (5 failures in 10 mins)
+- ✅ Initial database seeding script
+- ✅ Last-Administrator demotion/deactivation protection
+- ✅ Comprehensive SQLite-compatible test suites for Auth and RBAC
 
 ## Next Phases
 
-- **Phase 8**: Authentication & RBAC
-- **Phase 9-27**: Feature implementation
-
+- **Phase 9-27**: Feature implementation (Dashboard, Scans, Alerts, AI, etc.)
 ## Resources
 
 - [API Documentation](../../docs/api/)
