@@ -36,11 +36,7 @@ For detailed local development setup instructions, see [docs/deployment/local-de
 1. Clone the repository
 2. Set up a Neon PostgreSQL database
 3. Follow the local development guide to run backend and frontend
-4. Access the dashboard at `http://localhost:5173`
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+4. Access the dashboard at `http://localhost:5173
 
 ## Contributing
 
