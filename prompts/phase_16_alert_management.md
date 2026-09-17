@@ -3,23 +3,88 @@
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
 
-## Instructions
-Copy and paste the text in the prompt block below to start this phase. 
-
 ---
-### Prompt
+
+## Prompt
 
 ```text
-CYBERSHIELD AI — START PHASE 16: Alert Management
+CYBERSHIELD AI — PHASE 16: Alert Management
 
-Here are the requirements for this phase:
+Repo: https://github.com/JeslinSajan/cybershield-ai
 
-Detected threats become manageable security alerts.
+=======================================================================
+WHAT TO BUILD
+=======================================================================
 
-An alert can contain: Severity, Source, Device, Event, Timestamp, Description, Status, Risk.
-Possible statuses: New, Acknowledged, Investigating, Resolved, Dismissed.
+Full CRUD API for security alerts so Analysts and Admins can view, 
+investigate, and resolve them from the dashboard.
 
-Output: Security alert management system.
+=======================================================================
+ALERT STATUSES
+=======================================================================
 
-Please review the requirements, examine the relevant documentation (e.g., API contracts, DB schema, Architecture), and create an Implementation Plan artifact. Ensure the plan strictly follows our project constraints (local-first MVP, no paid AI APIs, strict RBAC, etc.). Do not start coding until I approve the plan.
+An alert moves through these statuses:
+  Open → Acknowledged → Investigating → Resolved
+  or
+  Open → False Positive
+
+=======================================================================
+BACKEND ENDPOINTS
+=======================================================================
+
+GET /api/v1/alerts/
+  - Admin, Analyst, Viewer (all can read).
+  - Returns list of alerts with: id, type, severity, status, 
+    description, source_ip, device_id, agent_id, created_at.
+  - Supports filters: ?status=Open&severity=High&type=BruteForce
+
+GET /api/v1/alerts/{id}
+  - All roles. Single alert detail with full history.
+
+PATCH /api/v1/alerts/{id}
+  - Admin and Analyst only (Viewer gets 403).
+  - Allowed fields to update: { "status": "Acknowledged" }
+  - Valid status transitions only:
+      Open → Acknowledged, Investigating, False Positive
+      Acknowledged → Investigating, Resolved, False Positive
+      Investigating → Resolved, False Positive
+  - Invalid transitions return 400 with a clear error message.
+  - When status changes, create a row in alert_events table:
+      { alert_id, changed_by (user_id), from_status, to_status, 
+        timestamp, notes (optional) }
+
+GET /api/v1/alerts/{id}/history
+  - All roles. Returns all status changes from alert_events.
+
+=======================================================================
+ALERT COUNTS FOR DASHBOARD
+=======================================================================
+
+GET /api/v1/alerts/summary
+  - All roles.
+  - Returns:
+      {
+        "open": 5,
+        "acknowledged": 2,
+        "investigating": 1,
+        "critical": 3,
+        "high": 4
+      }
+  - Used by the dashboard summary cards.
+
+=======================================================================
+TEST BEFORE PUSHING
+=======================================================================
+
+1. Create a test alert via the detection service.
+2. PATCH it to Acknowledged — confirm alert_events row is created.
+3. Try an invalid transition (e.g. Resolved → Open) — confirm 400.
+4. A Viewer trying to PATCH — confirm 403.
+5. GET /alerts/summary — confirm counts are correct.
+6. pytest tests/ — no regressions.
+
+=======================================================================
+COMMIT MESSAGE
+=======================================================================
+"feat: Phase 16 — alert management with status transitions and history"
 ```

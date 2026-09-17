@@ -3,24 +3,95 @@
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
 
-## Instructions
-Copy and paste the text in the prompt block below to start this phase. 
-
 ---
-### Prompt
+
+## Prompt
 
 ```text
-CYBERSHIELD AI — START PHASE 26: Documentation
+CYBERSHIELD AI — PHASE 26: Documentation
 
-Here are the requirements for this phase:
+Repo: https://github.com/JeslinSajan/cybershield-ai
 
-Prepare everything needed for your final-year project.
+=======================================================================
+WHAT TO BUILD
+=======================================================================
 
-Documents: SRS, Architecture, Database documentation, API documentation, Agent documentation, Installation guide, Deployment guide, Testing report, User manual, Screenshots, Project report.
+Write the documentation needed for your college final year project 
+submission. Document what is ACTUALLY built, not what was planned.
 
-Document what is actually implemented.
+=======================================================================
+DOCUMENTS TO CREATE / UPDATE
+=======================================================================
 
-Output: Complete technical documentation.
+1. docs/INSTALLATION.md
+   Step-by-step guide for setting up the project locally:
+   - Clone the repo
+   - Backend setup (Python, venv, pip install, .env, alembic migrate)
+   - Agent setup (pip install, .env, enroll)
+   - Frontend setup (npm install, .env, npm run dev)
+   - First login instructions
 
-Please review the requirements, examine the relevant documentation (e.g., API contracts, DB schema, Architecture), and create an Implementation Plan artifact. Ensure the plan strictly follows our project constraints (local-first MVP, no paid AI APIs, strict RBAC, etc.). Do not start coding until I approve the plan.
+2. docs/USER_MANUAL.md
+   How to use the system from an end-user perspective:
+   - How to log in
+   - How to register an agent
+   - How to run a discovery scan (with authorization warning)
+   - How to run a vulnerability scan
+   - How to investigate an alert
+   - How to use the AI explanation feature
+   - How to generate a report
+   - How to manage users (Admin only)
+
+3. docs/ARCHITECTURE.md (update the existing one)
+   Update to reflect what was actually built:
+   - Final system architecture diagram (use Mermaid)
+   - Backend module structure
+   - Agent module structure
+   - Database tables (the 25 tables)
+   - How data flows: Agent → Backend → DB → Frontend
+
+4. docs/API_REFERENCE.md
+   A simple summary of all live API endpoints grouped by category.
+   For each endpoint: method, path, auth required, who can access it,
+   brief description.
+
+5. docs/TEST_RESULTS.md
+   From Phase 23: paste the final pytest output and the integration 
+   test checklist results.
+
+6. Update README.md (root level)
+   - Project description (1 paragraph)
+   - Tech stack
+   - Live demo URL (Vercel frontend)
+   - Quick start (how to run locally in 5 steps)
+   - Screenshots (take real screenshots of the working system)
+
+=======================================================================
+SCREENSHOTS TO TAKE
+=======================================================================
+
+Take real screenshots from the live system and save to docs/screenshots/:
+  - Login page
+  - Dashboard with real data
+  - Agents page (agent showing ONLINE)
+  - Devices page (discovered devices)
+  - Vulnerabilities page (CVEs listed)
+  - Alerts page (with a BruteForce alert)
+  - AI explanation window
+  - A downloaded PDF report
+
+These screenshots go in your college report and in the README.
+
+=======================================================================
+DO NOT DO
+=======================================================================
+
+Do not document features that were not implemented.
+Do not copy-paste from the SRS as if it were the implementation.
+Write what actually works.
+
+=======================================================================
+COMMIT MESSAGE
+=======================================================================
+"docs: Phase 26 — complete project documentation and screenshots"
 ```
