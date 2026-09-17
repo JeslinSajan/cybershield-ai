@@ -56,9 +56,25 @@ Recalculate a device's risk score:
   - When a new alert is created for that device.
   - When an alert is resolved (score may go down).
 
-Store the result in the risk_scores table:
-  { device_id, organization_id, score, band, factor_breakdown (JSON),
-    calculated_at }
+Store the result in the risk_scores table (schema table 19).
+IMPORTANT: use the exact column names from the schema:
+  organization_id,
+  entity_type = "device",
+  entity_id = <device UUID>,
+  score = <calculated value>,
+  risk_band = "Low" / "Medium" / "High" / "Critical",
+  factor_breakdown (JSONB) = {
+    "vulnerability_score": 30,
+    "alert_score": 20,
+    "exposure_score": 10,
+    "total": 60,
+    "details": {
+      "critical_vulns": 1,
+      "open_brute_force_alerts": 1,
+      "open_ports": 12
+    }
+  },
+  formula_version = "v1"   ← REQUIRED field, do not omit
 
 factor_breakdown must store the individual components so the 
 AI assistant (Phase 19) can explain them:

@@ -42,16 +42,25 @@ GET /api/v1/alerts/{id}
   - All roles. Single alert detail with full history.
 
 PATCH /api/v1/alerts/{id}
-  - Admin and Analyst only (Viewer gets 403).
-  - Allowed fields to update: { "status": "Acknowledged" }
+  - Administrator and Analyst only (Viewer gets 403).
+  - Allowed fields to update: { "status": "Acknowledged", "reason": "..." }
   - Valid status transitions only:
       Open → Acknowledged, Investigating, False Positive
       Acknowledged → Investigating, Resolved, False Positive
       Investigating → Resolved, False Positive
   - Invalid transitions return 400 with a clear error message.
-  - When status changes, create a row in alert_events table:
-      { alert_id, changed_by (user_id), from_status, to_status, 
-        timestamp, notes (optional) }
+  - When status changes, create a row in alert_events table.
+    Use EXACT column names from schema (table 18):
+      organization_id, alert_id,
+      actor_user_id (user id from JWT),
+      from_status (previous status),
+      to_status (new status),
+      reason (optional note from the request body),
+      changed_at = now()
+  - Also write an audit_log entry:
+      action = "alert_status_changed",
+      actor_type = "user", actor_id = <user_id from JWT>,
+      target_type = "alerts", target_id = <alert_id>
 
 GET /api/v1/alerts/{id}/history
   - All roles. Returns all status changes from alert_events.

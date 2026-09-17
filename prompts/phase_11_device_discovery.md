@@ -55,15 +55,24 @@ When a discovery result arrives at POST /agents/results:
       - If new: create a new devices row with all available fields.
 
 Implement GET /api/v1/devices/ and GET /api/v1/devices/{id}:
-  - Admin/Analyst: full access.
-  - Viewer: read-only.
+  - Admin, Analyst, AND Viewer: all three roles can read devices.
   - Returns: ip_address, mac_address, hostname, vendor, status, 
     last_seen_at, agent_id.
 
 Also implement POST /api/v1/scans/ so Admin/Analyst can create a 
 discovery scan task that gets dispatched to an online agent:
-  - Body: { agent_id, scan_type: "discovery", target_scope: "192.168.1.0/24" }
-  - Creates a scan record + task for the agent to pick up.
+  - Administrator and Security Analyst only (Viewer gets 403).
+  - Body: { agent_id, scan_type: "discovery", target_scope: "192.168.1.0/24",
+            created_by_user_id: <from JWT> }
+  - All fields: organization_id (from JWT), agent_id, created_by_user_id,
+    scan_type, status=PENDING, target_scope.
+  - Creates a scans row. Agent picks it up via GET /agents/tasks.
+
+Also create device_interfaces rows when device has network interfaces:
+  - Table: device_interfaces (schema table 10)
+  - Columns: organization_id, device_id, name (e.g. eth0), mac_address,
+    ip_address, bytes_sent=0, bytes_received=0
+  - Create one device_interfaces row per interface Nmap reports.
 
 =======================================================================
 HOW IT FLOWS

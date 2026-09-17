@@ -54,13 +54,25 @@ Update POST /agents/heartbeat body to include the network stats.
 BACKEND SIDE
 =======================================================================
 
-Update the heartbeat handler to save network stats into the 
-agent_heartbeats.details JSONB column alongside existing health data.
+Update the heartbeat handler to save the network stats from the 
+heartbeat into two places:
+
+1. agent_heartbeats.details JSONB column 
+   (for quick health display on the agents page)
+
+2. device_interfaces table (schema table 10)
+   When a heartbeat arrives with interface stats:
+   - Look up the device linked to this agent (if any).
+   - For each interface in the payload:
+       Upsert a device_interfaces row:
+         organization_id, device_id, name, mac_address,
+         bytes_sent, bytes_received (updated each heartbeat).
+   - If no device is linked yet: skip this step silently.
 
 Add a new endpoint:
   GET /api/v1/agents/{agent_id}/network-stats
     - Returns last 10 heartbeats with network details.
-    - Admin/Analyst access only.
+    - Administrator and Analyst only (Viewer gets 403).
 
 =======================================================================
 WHAT THIS ENABLES

@@ -80,27 +80,40 @@ BACKEND ENDPOINTS
 POST /api/v1/ai/explain-alert
   - Body: { "alert_id": "uuid" }
   - Returns: { "explanation": "<generated text>" }
-  - All roles (read).
+  - Administrator and Analyst only. Viewer gets 403.
 
 POST /api/v1/ai/explain-vulnerability
   - Body: { "vulnerability_id": "uuid" }
   - Returns: { "explanation": "<generated text>" }
-  - All roles.
+  - Administrator and Analyst only. Viewer gets 403.
 
 POST /api/v1/ai/explain-risk
   - Body: { "device_id": "uuid" }
   - Returns: { "explanation": "<generated text>" }
-  - All roles.
+  - Administrator and Analyst only. Viewer gets 403.
 
 POST /api/v1/ai/chat
   - Body: { "message": "Why was this alert generated?", 
             "context_type": "alert", "context_id": "uuid" }
   - Returns: { "response": "<generated text>" }
-  - For the MVP: map common questions to the explain_* methods above.
-  - If the question doesn't match a pattern: return a helpful 
-    fallback message like "I can explain alerts, vulnerabilities, 
-    and risk scores. Please select one from the dashboard."
-  - All roles.
+  - Administrator and Analyst only. Viewer gets 403.
+  - Map common questions to the explain_* methods above.
+  - If the question doesn't match: return a helpful fallback.
+
+FOR ALL AI ENDPOINTS: save conversation history to the database.
+After generating the explanation, write to:
+
+  1. ai_conversations table (schema table 21):
+       organization_id, user_id (from JWT),
+       subject_type ("alert", "vulnerability", or "risk_score"),
+       subject_id (the alert/vuln/device id),
+       provider_type = "local_rule_ai"
+
+  2. ai_messages table (schema table 22):
+       conversation_id (from step 1),
+       role = "user", content = <the question or context>
+     And a second ai_messages row:
+       conversation_id, role = "assistant", content = <the explanation>
 
 =======================================================================
 IMPORTANT: This MUST be designed to be replaceable

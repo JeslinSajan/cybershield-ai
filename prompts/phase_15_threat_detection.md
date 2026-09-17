@@ -78,14 +78,31 @@ ALERT CREATION
 =======================================================================
 
 Create a new alert row in the alerts table with:
-  organization_id, agent_id, device_id (if known),
-  type (BruteForce / PortScan / SuspiciousLogin),
-  severity (High for BruteForce, Medium for PortScan, 
-            High for SuspiciousLogin),
+  organization_id (from agent's org),
+  agent_id,
+  device_id (if known),
+  alert_type — use EXACT values from schema:
+    "brute_force"       for Rule 1
+    "port_scan"         for Rule 2
+    "suspicious_login"  for Rule 3
+  severity:
+    "High" for brute_force,
+    "Medium" for port_scan,
+    "High" for suspicious_login,
   status = "Open",
-  description (a clear human-readable explanation),
-  source_ip (if applicable),
-  timestamp = now()
+  description (a clear human-readable explanation with actual numbers),
+  risk_score — set an initial value using this simple formula:
+    High severity alert   = 40
+    Medium severity alert = 20
+    Low severity alert    = 10
+    (Risk Scoring in Phase 17 will recalculate this properly)
+  triggered_at = now()
+
+After creating the alert, write an audit_log entry:
+  action = "alert_created",
+  actor_type = "system",
+  target_type = "alerts",
+  target_id = <new alert id>
 
 =======================================================================
 TEST BEFORE PUSHING

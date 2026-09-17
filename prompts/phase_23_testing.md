@@ -26,9 +26,9 @@ BACKEND TESTS (pytest)
 
 Ensure these test files exist and are passing:
 
-tests/test_backend_foundation.py   (already done in Phase 7)
-tests/test_auth.py                 (already done in Phase 8)
-tests/test_rbac.py                 (already done in Phase 8)
+tests/test_backend_foundation.py   (done — Phase 7)
+tests/test_auth.py                 (done — Phase 8)
+tests/test_rbac.py                 (done — Phase 8)
 tests/test_agents.py               (Phase 9/10)
 tests/test_devices.py              (Phase 11)
 tests/test_vulnerabilities.py      (Phase 13)
@@ -39,6 +39,9 @@ tests/test_risk_scores.py          (Phase 17)
 tests/test_threat_intelligence.py  (Phase 18)
 tests/test_ai.py                   (Phase 19)
 tests/test_reports.py              (Phase 20)
+tests/test_notifications.py        (Phase 21)
+tests/test_audit_logs.py           (Phase 21)
+tests/test_settings.py             (Phase 21)
 
 For each file, at minimum test:
   - The happy path (valid input → correct response).

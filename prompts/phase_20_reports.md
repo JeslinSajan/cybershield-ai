@@ -42,23 +42,32 @@ BACKEND ENDPOINTS
 =======================================================================
 
 POST /api/v1/reports/
-  - Admin/Analyst only.
-  - Body: { "type": "security_overview", "from_date": "...", 
-            "to_date": "..." }
-  - Generates the report, saves it to the reports table 
-    with status = "ready".
-  - Returns: { "report_id": "uuid", "status": "ready" }
+  - Administrator and Analyst only (Viewer gets 403 to generate).
+  - Body: { 
+      "type": "security_overview",   ← valid: security_overview, vulnerability, alert
+      "from_date": "2026-09-01T00:00:00Z",
+      "to_date": "2026-09-17T23:59:59Z"
+    }
+  - Map to schema columns (table 20):
+      organization_id (from JWT),
+      created_by_user_id (from JWT),
+      report_type = type from body,
+      period_start = from_date,
+      period_end = to_date,
+      status = "READY"
+  - After saving, write audit_log entry:
+      action = "report_generated", actor_type = "user",
+      target_type = "reports", target_id = <report id>
+  - Returns: { "report_id": "uuid", "status": "READY" }
 
 GET /api/v1/reports/
-  - Admin/Analyst only.
-  - Returns list of generated reports.
+  - Administrator, Analyst, AND Viewer (Viewer can VIEW reports).
+  - Returns list of generated reports with type, period, status.
 
 GET /api/v1/reports/{id}/download
-  - Admin/Analyst only.
+  - Administrator and Analyst only (Viewer gets 403 to download).
   - Returns the report as a file download.
-  - Support both PDF (using reportlab or fpdf2) and CSV.
-  - Use query param: ?format=pdf or ?format=csv
-  - Default format: PDF.
+  - Support: ?format=pdf or ?format=csv. Default: pdf.
 
 =======================================================================
 PDF GENERATION

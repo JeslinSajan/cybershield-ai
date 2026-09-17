@@ -33,20 +33,25 @@ BACKEND ENDPOINTS
 =======================================================================
 
 POST /api/v1/threat-intelligence/
-  - Admin/Analyst only.
-  - Add a new indicator: { type, value, description, severity }
+  - Administrator and Analyst only (Viewer gets 403).
+  - Add a new indicator.
+  - Use EXACT column names from schema (table 16):
+      organization_id (from JWT), indicator_type, value, 
+      description, source (default: "local")
+  - Valid indicator_type values: "ip", "domain", "hash"
+  - Returns the created indicator.
 
 GET /api/v1/threat-intelligence/
-  - All roles (read).
-  - Returns all indicators with: id, type, value, description, 
-    severity, created_at.
-  - Filter by: ?type=ip&severity=High
+  - Admin, Analyst, AND Viewer (all roles can read — per user-roles.md).
+  - Returns all indicators with: id, indicator_type, value, 
+    description, source, created_at.
+  - Filter by: ?indicator_type=ip
 
 GET /api/v1/threat-intelligence/{id}
   - All roles.
 
 DELETE /api/v1/threat-intelligence/{id}
-  - Admin only.
+  - Administrator only.
 
 =======================================================================
 INDICATOR MATCHING
@@ -54,12 +59,15 @@ INDICATOR MATCHING
 
 Add a check in the log save handler:
   - When a log entry has a source_ip: check if it matches any 
-    threat_indicators row with type = "ip".
-  - If matched: create a "Malware Indicator" alert with:
-      severity = indicator.severity,
-      description = "Log from known malicious IP: <ip>. 
-                     Indicator: <indicator.description>",
-      source_ip = the matched IP.
+    threat_indicators row where indicator_type = "ip" 
+    AND value = source_ip (exact match).
+  - If matched: create a "malware_indicator" alert 
+    (use exact alert_type value from schema) with:
+      severity = "High",
+      description = "Log entry received from known malicious IP: <ip>. 
+                     Indicator description: <indicator.description>",
+      risk_score = 40 (Phase 17 will refine)
+      triggered_at = now()
 
 =======================================================================
 SEED DATA

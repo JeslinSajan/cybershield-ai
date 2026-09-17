@@ -79,15 +79,39 @@ PAGES TO BUILD
    - "Generate Report" button with type selector.
    - Download PDF / CSV buttons.
 
-10. AI ASSISTANT PAGE (or sidebar panel)
+10. AI ASSISTANT PAGE (Admin/Analyst only — Viewer sees 403)
     - Simple chat-style interface.
     - User types a question or selects a context item.
     - Shows AI explanation from POST /ai/chat.
     - Clearly labeled: "Local Security Explanation Engine"
+    - Do NOT show this page/menu to Viewers.
 
 11. SETTINGS PAGE (Admin only)
     - User management: list users, create user, change role, 
       deactivate user.
+    - System settings: GET/PUT /api/v1/settings/ 
+      (build these backend endpoints in this phase if not yet done)
+      Keys to expose in UI: heartbeat_interval, scan_timeout,
+      agent_offline_timeout_seconds.
+
+12. AUDIT LOGS PAGE (Admin only)
+    - GET /api/v1/audit-logs/ (Administrator only — Viewer/Analyst get 403)
+    - Shows: action, actor, target, timestamp
+    - Filter by: action type, date range
+    - Implement this backend endpoint now if not yet done.
+
+13. NOTIFICATIONS (all roles)
+    - A bell icon in the top navigation bar.
+    - GET /api/v1/notifications/ — returns unread notifications 
+      for the logged-in user from the notifications table (schema table 23).
+    - Mark as read: PATCH /api/v1/notifications/{id}/read
+    - When a High or Critical alert is created (Phase 15), create a 
+      notification row for each user in the organization:
+        notification_type = "alert", channel = "dashboard",
+        title = "New <severity> Alert: <alert_type>",
+        body = <alert description>, is_read = False
+    - Show unread count as a badge on the bell icon.
+    - Implement both the backend endpoints and the frontend component.
 
 =======================================================================
 TECH REQUIREMENTS

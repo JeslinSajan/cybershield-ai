@@ -31,7 +31,18 @@ STEP 1 — BACKEND (Render)
 
 The backend is already deployed to Render. In this phase:
 
-1. Make sure all Render environment variables are set:
+1. Confirm ALL 25 tables exist in Neon by running Alembic migrations.
+   In Render's Shell tab (or local with Neon DATABASE_URL):
+     alembic upgrade head
+   Confirm output shows "Running upgrade ... -> <latest>".
+   If any migrations are missing (new tables from Phases 9-22): 
+   create them now and push before deploying.
+
+2. Run the seed script to create initial roles + admin user:
+     python -m app.core.seed
+   (Only needed on first deploy or if database is wiped)
+
+3. Make sure all Render environment variables are set:
      DATABASE_URL
      JWT_SECRET_KEY      (strong random key — not the dev default)
      ENVIRONMENT         = production
@@ -39,13 +50,6 @@ The backend is already deployed to Render. In this phase:
      CORS_ORIGINS        = https://<your-vercel-url>
      AGENT_OFFLINE_TIMEOUT_SECONDS = 90
      LOG_LEVEL           = INFO
-
-2. Run Alembic migrations against Neon:
-     In Render's Shell tab or via a one-off command:
-     alembic upgrade head
-
-3. Run the seed script to create initial roles + admin user:
-     python -m app.core.seed
 
 4. Verify: GET https://cybershield-ai-xnn7.onrender.com/api/v1/health
    Must return: {"status": "healthy"}
