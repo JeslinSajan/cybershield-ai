@@ -2,7 +2,10 @@
 
 Base path: `/api/v1`
 
-This file documents the non-human Agent actor only. It is intentionally separated from human user endpoints. Agent routes must authenticate with Agent credentials, not with a human JWT; they are scoped only to Agent operations and never to user, role, or system settings actions.
+This file documents both agent-credential endpoints (used by the Agent
+process itself) and human-JWT endpoints (used by the dashboard to manage
+agents). The two auth systems are completely separate — see Agent Isolation
+Rules below.
 
 ## FR Traceability
 - FR-4.1: enrollment token generation by Administrator
@@ -11,6 +14,7 @@ This file documents the non-human Agent actor only. It is intentionally separate
 - FR-4.4: offline detection
 - FR-4.5: Agent revocation
 - FR-4.6: credential rotation
+- FR-4.7: human-facing agent list and detail (dashboard management)
 - FR-5.1: authorized scan initiation via online Agent
 - FR-8.1: log collection
 - FR-7.1: interface statistics
@@ -266,3 +270,85 @@ This file documents the non-human Agent actor only. It is intentionally separate
 - Success status: `200 OK`
 - Error statuses: `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
 - Notes: This supports FR-4.6 without forcing full re-enrollment.
+
+---
+
+## Human-Facing Agent Management Endpoints
+
+These endpoints use a **human JWT** (from `POST /auth/login`), not an Agent
+credential. They allow dashboard users to view and manage agents.
+They must never return raw credential tokens.
+
+### GET /agents/
+
+- Auth requirement: JWT required
+- Authorization: Administrator and Security Analyst. Viewer receives `403 Forbidden`.
+- Request schema: none
+- Query parameters:
+  - `status` (optional): filter by `ONLINE`, `OFFLINE`, or `PENDING`
+  - `limit` (optional, default 50, max 200)
+  - `offset` (optional, default 0)
+- Response schema:
+
+```json
+[
+  {
+    "id": "uuid",
+    "organization_id": "uuid",
+    "name": "warehouse-host-01",
+    "hostname": "warehouse-host-01",
+    "status": "ONLINE",
+    "version": "1.0.0",
+    "is_active": true,
+    "last_heartbeat_at": "2026-09-20T12:30:00Z",
+    "created_at": "2026-09-01T09:00:00Z"
+  }
+]
+```
+
+- Success status: `200 OK`
+- Error statuses: `401 Unauthorized`, `403 Forbidden`
+- Notes: Returns only agents belonging to the authenticated user's
+  organization (`organization_id` scoped). Soft-deleted agents
+  (`deleted_at IS NOT NULL`) are excluded. Matches FR-4.7.
+
+### GET /agents/{agent_id}
+
+- Auth requirement: JWT required
+- Authorization: Administrator and Security Analyst. Viewer receives `403 Forbidden`.
+- Request schema: none
+- Response schema:
+
+```json
+{
+  "id": "uuid",
+  "organization_id": "uuid",
+  "name": "warehouse-host-01",
+  "hostname": "warehouse-host-01",
+  "status": "ONLINE",
+  "version": "1.0.0",
+  "is_active": true,
+  "last_heartbeat_at": "2026-09-20T12:30:00Z",
+  "created_at": "2026-09-01T09:00:00Z",
+  "updated_at": "2026-09-20T12:30:00Z",
+  "recent_heartbeats": [
+    {
+      "id": "uuid",
+      "timestamp": "2026-09-20T12:30:00Z",
+      "status": "ONLINE",
+      "cpu_percent": 36.4,
+      "memory_percent": 58.1,
+      "details": {
+        "disk_usage_percent": 43,
+        "network_status": "ok"
+      }
+    }
+  ]
+}
+```
+
+- Success status: `200 OK`
+- Error statuses: `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
+- Notes: `recent_heartbeats` returns the last 10 rows from `agent_heartbeats`
+  ordered by `timestamp DESC`. The response must not expose credential
+  hashes or enrollment tokens. Matches FR-4.7.

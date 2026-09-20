@@ -2,6 +2,16 @@
 
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
+---
+
+> **STANDING RULE — VERIFY BEFORE EXECUTING**
+> Before running this prompt, re-read the actual current state of the repo:
+> (1) Check which backend endpoints already exist in backend/app/api/v1/.
+> (2) Check which Alembic migrations have already been run (alembic current).
+> (3) Check which tests already exist in tests/.
+> (4) If the real repo state differs from what this prompt assumes — update
+>     this prompt file FIRST, then execute it. Prompts are a living plan,
+>     not a frozen snapshot.
 
 ---
 
