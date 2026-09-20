@@ -2,108 +2,43 @@
 
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
+
 ---
 
-> **STANDING RULE — VERIFY BEFORE EXECUTING**
-> Before running this prompt, re-read the actual current state of the repo:
-> (1) Check which backend endpoints already exist in backend/app/api/v1/.
-> (2) Check which Alembic migrations have already been run (alembic current).
-> (3) Check which tests already exist in tests/.
-> (4) If the real repo state differs from what this prompt assumes — update
->     this prompt file FIRST, then execute it. Prompts are a living plan,
->     not a frozen snapshot.
+> **STANDING RULE — VERIFY BEFORE EXECUTING**  
+> This prompt was written before execution. Before running it:
+> (1) Run `alembic current` — confirm which migrations are applied.
+> (2) Check `backend/app/api/v1/` — note which endpoints already exist.
+> (3) Check `tests/` — note which test files already exist.
+> (4) If reality differs from this prompt's assumptions, update this file first, then execute.
+> Prompts are a living plan, not a frozen snapshot.
 
 ---
 
 ## Prompt
 
-```text
-CYBERSHIELD AI — PHASE 16: Alert Management
+**Scope:**
+1. **CRUD Endpoints (in backend/app/api/v1/alerts.py)**:
+   - `GET /alerts/summary`: Role: `get_any_authenticated_user`. Must return counts for `{open, acknowledged, investigating, resolved, false_positive, critical, high, medium, low}`. **Register this route BEFORE `/{id}` in the router.**
+   - `GET /alerts/`: Role: `get_any_authenticated_user`. Filters: `status`, `severity`, `alert_type`, `limit`, `offset`.
+   - `GET /alerts/{id}`: Role: `get_any_authenticated_user`. Returns alert + `alert_events` history.
+   - `GET /alerts/{id}/history`: Role: `get_any_authenticated_user`. Returns `alert_events` ordered by `changed_at`.
+   - `PATCH /alerts/{id}`: Role: `get_current_analyst_or_admin` (Viewers get 403).
+2. **Patch Logic**:
+   - Body: `{status: string, reason: string (optional)}`.
+   - Valid Transitions: 
+     - Open → Acknowledged / Investigating / False Positive
+     - Acknowledged → Investigating / Resolved / False Positive
+     - Investigating → Resolved / False Positive
+   - Invalid Transitions: Returns 400 with `VALIDATION_ERROR` code in the exact error envelope format.
+   - Success: Create `AlertEvent` row (columns: `organization_id`, `alert_id`, `actor_user_id` [from JWT], `from_status`, `to_status`, `reason`, `changed_at`=now()).
+   - Write `AuditLog`: `actor_type`='user', `actor_id`=user.id, `action`='alert_status_changed', `target_type`='alerts', `target_id`=alert.id.
 
-Repo: https://github.com/JeslinSajan/cybershield-ai
+**Rules & Constraints:**
+- Return actual error envelope on 400s or 403s.
+- Use actual dependency `get_current_analyst_or_admin`.
+- Update API docs.
 
-=======================================================================
-WHAT TO BUILD
-=======================================================================
-
-Full CRUD API for security alerts so Analysts and Admins can view, 
-investigate, and resolve them from the dashboard.
-
-=======================================================================
-ALERT STATUSES
-=======================================================================
-
-An alert moves through these statuses:
-  Open → Acknowledged → Investigating → Resolved
-  or
-  Open → False Positive
-
-=======================================================================
-BACKEND ENDPOINTS
-=======================================================================
-
-GET /api/v1/alerts/
-  - Admin, Analyst, Viewer (all can read).
-  - Returns list of alerts with: id, type, severity, status, 
-    description, source_ip, device_id, agent_id, created_at.
-  - Supports filters: ?status=Open&severity=High&type=BruteForce
-
-GET /api/v1/alerts/{id}
-  - All roles. Single alert detail with full history.
-
-PATCH /api/v1/alerts/{id}
-  - Administrator and Analyst only (Viewer gets 403).
-  - Allowed fields to update: { "status": "Acknowledged", "reason": "..." }
-  - Valid status transitions only:
-      Open → Acknowledged, Investigating, False Positive
-      Acknowledged → Investigating, Resolved, False Positive
-      Investigating → Resolved, False Positive
-  - Invalid transitions return 400 with a clear error message.
-  - When status changes, create a row in alert_events table.
-    Use EXACT column names from schema (table 18):
-      organization_id, alert_id,
-      actor_user_id (user id from JWT),
-      from_status (previous status),
-      to_status (new status),
-      reason (optional note from the request body),
-      changed_at = now()
-  - Also write an audit_log entry:
-      action = "alert_status_changed",
-      actor_type = "user", actor_id = <user_id from JWT>,
-      target_type = "alerts", target_id = <alert_id>
-
-GET /api/v1/alerts/{id}/history
-  - All roles. Returns all status changes from alert_events.
-
-=======================================================================
-ALERT COUNTS FOR DASHBOARD
-=======================================================================
-
-GET /api/v1/alerts/summary
-  - All roles.
-  - Returns:
-      {
-        "open": 5,
-        "acknowledged": 2,
-        "investigating": 1,
-        "critical": 3,
-        "high": 4
-      }
-  - Used by the dashboard summary cards.
-
-=======================================================================
-TEST BEFORE PUSHING
-=======================================================================
-
-1. Create a test alert via the detection service.
-2. PATCH it to Acknowledged — confirm alert_events row is created.
-3. Try an invalid transition (e.g. Resolved → Open) — confirm 400.
-4. A Viewer trying to PATCH — confirm 403.
-5. GET /alerts/summary — confirm counts are correct.
-6. pytest tests/ — no regressions.
-
-=======================================================================
-COMMIT MESSAGE
-=======================================================================
-"feat: Phase 16 — alert management with status transitions and history"
-```
+**Verification Checklist:**
+- [ ] Provide output of `curl` hitting `PATCH /alerts/{id}` and successfully transitioning an alert.
+- [ ] Provide output of `curl GET /alerts/summary`.

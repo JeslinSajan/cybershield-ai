@@ -1,132 +1,81 @@
+---START HEADER---
 # Phase 24 — Deployment
 
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
+
 ---
 
-> **STANDING RULE — VERIFY BEFORE EXECUTING**
-> Before running this prompt, re-read the actual current state of the repo:
-> (1) Check which backend endpoints already exist in backend/app/api/v1/.
-> (2) Check which Alembic migrations have already been run (alembic current).
-> (3) Check which tests already exist in tests/.
-> (4) If the real repo state differs from what this prompt assumes — update
->     this prompt file FIRST, then execute it. Prompts are a living plan,
->     not a frozen snapshot.
+> **STANDING RULE — VERIFY BEFORE EXECUTING**  
+> This prompt was written before execution. Before running it:  
+> (1) Run `alembic current` — confirm which migrations are applied.  
+> (2) Check `backend/app/api/v1/` — note which endpoints already exist (stubs).  
+> (3) Check `tests/` — note which test files already exist.  
+> (4) If reality differs from this prompt's assumptions, update this file first.  
+> Prompts are a living plan, not a frozen snapshot.
 
 ---
 
 ## Prompt
+---END HEADER---
 
-```text
-CYBERSHIELD AI — PHASE 24: Deployment
+### Scope
+Hosting: Vercel (frontend) + Render (backend) + Neon (Postgres). NOT Docker Compose.
 
-Repo: https://github.com/JeslinSajan/cybershield-ai
+#### Step 1: Verify ALL database migrations
+Run locally with Neon DATABASE_URL:
+`alembic upgrade head`
+Confirm all tables exist. If any are missing from phases 9-22: add migrations now.
+DO NOT deploy to Render until this is confirmed locally against Neon.
 
-=======================================================================
-WHAT TO BUILD
-=======================================================================
+#### Step 2: Backend environment variables on Render
+- `DATABASE_URL` (Neon connection string)
+- `JWT_SECRET_KEY` (strong random key, min 32 chars)
+- `ENVIRONMENT = production`
+- `DEBUG = False`
+- `CORS_ORIGINS = https://<your-vercel-url>.vercel.app`
+- `AGENT_OFFLINE_TIMEOUT_SECONDS = 90`
+- `LOG_LEVEL = INFO`
+- `SEED_ADMIN_EMAIL` (first admin account)
+- `SEED_ADMIN_PASSWORD` (strong password, never logged)
+NEVER log these values. Confirm backend logs do not print them.
 
-Deploy the complete system so it is accessible live.
+#### Step 3: Render deploy
+`render.yaml` must have `runtimeVersion` field.
+`backend/.python-version` file must exist and contain `3.12.7`.
+(This was the fix from Phase 7 that resolved the pydantic-core build failure. Do not remove this file. Do not change the version.)
+Verify live: GET https://cybershield-ai-xnn7.onrender.com/api/v1/health
+Must return: `{"status": "healthy"}`
+Also verify: GET /api/v1/health/db → `{"status": "healthy", "database": "connected"}`
 
-Hosting:
-  Frontend  → Vercel
-  Backend   → Render
-  Database  → Neon PostgreSQL
+#### Step 4: Frontend on Vercel
+Set `VITE_API_BASE_URL = https://cybershield-ai-xnn7.onrender.com` in Vercel env vars.
+Build: Framework=Vite, Root=frontend, Build command=npm run build, Output=dist.
+Verify: login page loads, real JWT returned, Dashboard shows live data.
 
-The agent runs locally on the demo machine (your laptop/PC).
+#### Step 5: Agent (runs locally, not deployed)
+Update `agent/.env`: `BACKEND_URL = https://cybershield-ai-xnn7.onrender.com`
+Generate enrollment token via production API.
+Start agent → confirm ONLINE in production dashboard.
 
-=======================================================================
-STEP 1 — BACKEND (Render)
-=======================================================================
+Document live URLs in `docs/PHASE24_DEPLOYMENT.md`.
 
-The backend is already deployed to Render. In this phase:
+### Required Verification Checklist:
+- [ ] Live health endpoints return 200 (paste actual responses).
+- [ ] Login with production admin account works.
+- [ ] Agent enrolls and sends heartbeat to production backend.
+- [ ] Discovery scan runs end-to-end in production.
+- [ ] PDF report downloads successfully from live URL.
 
-1. Confirm ALL 25 tables exist in Neon by running Alembic migrations.
-   In Render's Shell tab (or local with Neon DATABASE_URL):
-     alembic upgrade head
-   Confirm output shows "Running upgrade ... -> <latest>".
-   If any migrations are missing (new tables from Phases 9-22): 
-   create them now and push before deploying.
-
-2. Run the seed script to create initial roles + admin user:
-     python -m app.core.seed
-   (Only needed on first deploy or if database is wiped)
-
-3. Make sure all Render environment variables are set:
-     DATABASE_URL
-     JWT_SECRET_KEY      (strong random key — not the dev default)
-     ENVIRONMENT         = production
-     DEBUG               = False
-     CORS_ORIGINS        = https://<your-vercel-url>
-     AGENT_OFFLINE_TIMEOUT_SECONDS = 90
-     LOG_LEVEL           = INFO
-
-4. Verify: GET https://cybershield-ai-xnn7.onrender.com/api/v1/health
-   Must return: {"status": "healthy"}
-
-5. Verify: GET /api/v1/health/db
-   Must return: {"status": "healthy", "database": "connected"}
-
-=======================================================================
-STEP 2 — FRONTEND (Vercel)
-=======================================================================
-
-1. Connect the GitHub repo to Vercel if not already done.
-
-2. Set environment variable in Vercel:
-     VITE_API_BASE_URL = https://cybershield-ai-xnn7.onrender.com
-
-3. Set build settings:
-     Framework: Vite
-     Root directory: frontend
-     Build command: npm run build
-     Output directory: dist
-
-4. Deploy. Verify the login page loads and you can log in with 
-   the seeded admin account.
-
-=======================================================================
-STEP 3 — AGENT (Local)
-=======================================================================
-
-The agent does not need cloud deployment — it runs on the customer's 
-machine. For the demo, it runs on your laptop.
-
-Create agent/INSTALL.md explaining:
-  1. Install Python 3.12+
-  2. Install Nmap (https://nmap.org/download.html)
-  3. pip install -r requirements.txt
-  4. Copy .env.example to .env
-  5. Fill in BACKEND_URL and ENROLLMENT_TOKEN
-  6. Run: python main.py
-
-=======================================================================
-STEP 4 — NEON DATABASE
-=======================================================================
-
-Confirm all 25 tables exist in Neon:
-  Run: alembic current
-  Should show the latest migration is applied.
-
-If not: run alembic upgrade head against Neon.
-
-=======================================================================
-VERIFY EVERYTHING IS LIVE
-=======================================================================
-
-1. Open the Vercel URL in a browser.
-2. Login with the seeded admin account.
-3. Open a second terminal — start the agent pointing to 
-   the PRODUCTION backend URL.
-4. In the dashboard — confirm the agent appears as ONLINE.
-5. Run a discovery scan from the UI.
-6. Confirm devices appear in the Devices page.
-7. Download a report as PDF.
-
-Document the live URLs in docs/PHASE24_DEPLOYMENT.md.
-
-=======================================================================
-COMMIT MESSAGE
-=======================================================================
-"docs: Phase 24 — deployment verification and live system URLs"
-```
+### System Standing Rules Reminders:
+- Local-first: LocalRuleAI only, no external AI API ever.
+- Vercel + Render + Neon. No Docker Compose.
+- Never log secrets at any log level (DATABASE_URL, JWT_SECRET, agent credentials, passwords).
+- Pin every new dependency version explicitly.
+- Every endpoint traces to a FR in docs/srs/functional-requirements.md.
+- Check docs/api/*.md — new endpoints must be documented first.
+- Run alembic current before assuming tables exist.
+- Never force-push.
+- Verification checklist requires actual evidence (pytest output, curl).
+- Error Envelope: `{"error": {"code": "...", "message": "...", "details": []}}`
+- RBAC dependencies: `get_current_admin`, `get_current_analyst_or_admin`, `get_any_authenticated_user`

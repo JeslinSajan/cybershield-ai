@@ -1,92 +1,75 @@
+---START HEADER---
 # Phase 25 — Performance & Reliability
 
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
+
 ---
 
-> **STANDING RULE — VERIFY BEFORE EXECUTING**
-> Before running this prompt, re-read the actual current state of the repo:
-> (1) Check which backend endpoints already exist in backend/app/api/v1/.
-> (2) Check which Alembic migrations have already been run (alembic current).
-> (3) Check which tests already exist in tests/.
-> (4) If the real repo state differs from what this prompt assumes — update
->     this prompt file FIRST, then execute it. Prompts are a living plan,
->     not a frozen snapshot.
+> **STANDING RULE — VERIFY BEFORE EXECUTING**  
+> This prompt was written before execution. Before running it:  
+> (1) Run `alembic current` — confirm which migrations are applied.  
+> (2) Check `backend/app/api/v1/` — note which endpoints already exist (stubs).  
+> (3) Check `tests/` — note which test files already exist.  
+> (4) If reality differs from this prompt's assumptions, update this file first.  
+> Prompts are a living plan, not a frozen snapshot.
 
 ---
 
 ## Prompt
+---END HEADER---
 
-```text
-CYBERSHIELD AI — PHASE 25: Performance & Reliability
+### Scope
+Targeted, minimal changes to ensure demo stability. No premature optimization.
 
-Repo: https://github.com/JeslinSajan/cybershield-ai
+#### 1. MISSING INDEXES
+Check these queries via EXPLAIN ANALYZE in Neon's SQL editor:
+- alerts filtered by organization_id + status
+- logs filtered by organization_id + timestamp
+- agent_heartbeats filtered by agent_id + timestamp
+If doing a full table scan: create an Alembic migration adding the index.
+Do not add indexes speculatively — only for confirmed slow queries.
 
-=======================================================================
-WHAT TO BUILD
-=======================================================================
+#### 2. PAGINATION on all list endpoints
+Every GET list endpoint must support: `?limit=50&offset=0` (default limit=50, max=200)
+Check these endpoints and add limit/offset if missing:
+`GET /devices/, GET /alerts/, GET /logs/, GET /vulnerabilities/, GET /agents/, GET /threat-intelligence/, GET /reports/`
 
-Make the system more reliable for the demo. Fix the most obvious 
-performance issues. Keep changes minimal and safe.
+#### 3. HEARTBEAT CLEANUP (prevent agent_heartbeats table from growing unbounded)
+Add a background task to main.py lifespan that runs once daily:
+`DELETE FROM agent_heartbeats WHERE created_at < now() - interval '7 days'`
+Wrap in try/except — failure must not crash the backend.
+Log: "Heartbeat cleanup: deleted N rows older than 7 days."
+math: 2880 heartbeats/agent/day x 7 days = ~20k rows per agent max.
 
-Your development machine has 8GB RAM — keep everything lightweight.
+#### 4. AGENT STARTUP RETRY
+If backend unreachable at agent startup:
+Retry every 30 seconds up to 10 times before giving up.
+Log: "Backend not reachable. Retry N/10 in 30s..."
+After 10 failures: log "Backend unreachable after 10 retries. Exiting." and `exit(1)`.
 
-=======================================================================
-BACKEND FIXES
-=======================================================================
+#### 5. FRONTEND AUTO-REFRESH
+Verify from Phase 21:
+Dashboard auto-refreshes every 60s (setInterval).
+Agents page auto-refreshes every 30s.
+If not implemented: add it now.
+Add loading spinner on every data fetch (check all pages).
+Add error message on API failure (e.g., "Could not load devices. Check your connection.").
 
-1. DATABASE QUERIES — add missing indexes.
-   Check these common queries and confirm indexes exist:
-   - alerts filtered by organization_id + status
-   - logs filtered by organization_id + timestamp
-   - agent_heartbeats filtered by agent_id + timestamp
-   - devices filtered by organization_id
-   - vulnerabilities filtered by device_id
-   
-   Run EXPLAIN ANALYZE on slow queries in Neon's SQL editor to 
-   identify any that do a full table scan. Add indexes where needed 
-   via a new Alembic migration.
+### Required Verification Checklist:
+- [ ] Start agent BEFORE backend → paste agent logs showing retry behavior.
+- [ ] GET /api/v1/logs/?limit=10 → confirm only 10 rows returned.
+- [ ] pytest tests/ -v — 0 regressions.
 
-2. PAGINATION — add to all list endpoints.
-   Every GET list endpoint must support:
-     ?limit=50&offset=0  (default limit=50, max=200)
-   This prevents the API from returning thousands of rows at once.
-   Update any endpoints missing this.
-
-3. HEARTBEAT CLEANUP — keep the agent_heartbeats table manageable.
-   Add a background task that runs once daily and deletes 
-   heartbeats older than 7 days.
-   (agent_heartbeats can grow very fast — 30s × 60 × 24 = 2880 
-   rows per agent per day)
-
-4. AGENT RETRY ON STARTUP
-   If the backend is not reachable when the agent starts, 
-   the agent should retry connecting every 30 seconds instead 
-   of crashing. Log: "Backend not reachable. Retrying in 30s..."
-
-=======================================================================
-FRONTEND FIXES
-=======================================================================
-
-1. Add loading spinners on all pages that fetch data.
-2. Add error messages when API calls fail 
-   (e.g. "Could not load devices. Check your connection.").
-3. Auto-refresh the Dashboard every 60 seconds.
-4. Auto-refresh the Agents page every 30 seconds 
-   (so ONLINE/OFFLINE status updates without manual refresh).
-
-=======================================================================
-TEST BEFORE PUSHING
-=======================================================================
-
-1. Start the agent before the backend — confirm it retries cleanly.
-2. GET /api/v1/logs/?limit=10 — confirm only 10 rows returned.
-3. Leave the system running for 10 minutes — confirm no memory 
-   spikes or crashes.
-4. pytest tests/ — no regressions.
-
-=======================================================================
-COMMIT MESSAGE
-=======================================================================
-"feat: Phase 25 — performance improvements, pagination, heartbeat cleanup"
-```
+### System Standing Rules Reminders:
+- Local-first: LocalRuleAI only, no external AI API ever.
+- Vercel + Render + Neon. No Docker Compose.
+- Never log secrets at any log level (DATABASE_URL, JWT_SECRET, agent credentials, passwords).
+- Pin every new dependency version explicitly.
+- Every endpoint traces to a FR in docs/srs/functional-requirements.md.
+- Check docs/api/*.md — new endpoints must be documented first.
+- Run alembic current before assuming tables exist.
+- Never force-push.
+- Verification checklist requires actual evidence (pytest output, curl).
+- Error Envelope: `{"error": {"code": "...", "message": "...", "details": []}}`
+- RBAC dependencies: `get_current_admin`, `get_current_analyst_or_admin`, `get_any_authenticated_user`

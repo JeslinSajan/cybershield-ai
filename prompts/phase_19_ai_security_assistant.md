@@ -2,161 +2,44 @@
 
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
+
 ---
 
-> **STANDING RULE — VERIFY BEFORE EXECUTING**
-> Before running this prompt, re-read the actual current state of the repo:
-> (1) Check which backend endpoints already exist in backend/app/api/v1/.
-> (2) Check which Alembic migrations have already been run (alembic current).
-> (3) Check which tests already exist in tests/.
-> (4) If the real repo state differs from what this prompt assumes — update
->     this prompt file FIRST, then execute it. Prompts are a living plan,
->     not a frozen snapshot.
+> **STANDING RULE — VERIFY BEFORE EXECUTING**  
+> This prompt was written before execution. Before running it:
+> (1) Run `alembic current` — confirm which migrations are applied.
+> (2) Check `backend/app/api/v1/` — note which endpoints already exist.
+> (3) Check `tests/` — note which test files already exist.
+> (4) If reality differs from this prompt's assumptions, update this file first, then execute.
+> Prompts are a living plan, not a frozen snapshot.
 
 ---
 
 ## Prompt
 
-```text
-CYBERSHIELD AI — PHASE 19: AI Security Assistant
+**Scope:**
+1. **Local Rule AI Implementation (backend/app/services/ai_service.py)**:
+   - Create class `LocalRuleAI` implementing an `AIService` abstraction. This is NOT an LLM, and uses NO external API. Label in UI: 'Local Security Explanation Engine'.
+   - `explain_alert(db, alert_id, org_id) -> str`: Build explanations using actual alert data (`alert_type`, `severity`, `description`, `device`, `source_ip`).
+   - `explain_vulnerability(db, vuln_id, org_id) -> str`: Build using `cve_id`, `severity`, `affected_service`, `affected_version`, `summary`, `recommendation`.
+   - `explain_risk_score(db, device_id, org_id) -> str`: Read `RiskScore.factor_breakdown`, `json.loads` it (since it's `Text`), and generate a string explanation using the exact values.
+2. **Endpoints (in backend/app/api/v1/ai.py)**:
+   - Role: **`get_current_analyst_or_admin` ONLY** (Viewer cannot use AI).
+   - `POST /ai/explain-alert` (body: `{alert_id: uuid}`)
+   - `POST /ai/explain-vulnerability` (body: `{vulnerability_id: uuid}`)
+   - `POST /ai/explain-risk` (body: `{device_id: uuid}`)
+   - `POST /ai/chat` (body: `{message: str, context_type: str, context_id: uuid}`). Maps to `explain_*` based on `context_type`.
+3. **Chat History**:
+   - Check `models/ai.py` for actual columns.
+   - `AIConversation`: `organization_id`, `user_id`, `subject_type`, `subject_id`, `provider_type`='local_rule_ai'.
+   - `AIMessage`: `conversation_id`, `role` ('user'/'assistant'), `content`, `created_at`.
+   - Save chat histories correctly upon `POST /ai/chat`.
 
-Repo: https://github.com/JeslinSajan/cybershield-ai
+**Rules & Constraints:**
+- Do NOT use OpenAI/Gemini or external APIs.
+- Adhere to the error envelope format.
+- RBAC must be exactly `get_current_analyst_or_admin`.
 
-IMPORTANT: This is NOT a cloud AI / LLM / ChatGPT integration.
-This is a LOCAL rule-based explanation engine.
-Label it "Local Security Explanation Engine" in the UI.
-No external API calls. No paid services.
-
-=======================================================================
-WHAT TO BUILD
-=======================================================================
-
-A simple backend service that generates human-readable explanations 
-for alerts, vulnerabilities, and risk scores using templates and 
-the actual data from the database.
-
-Think of it as a smart template engine, not AI.
-
-=======================================================================
-BACKEND ARCHITECTURE
-=======================================================================
-
-Create backend/app/services/ai_service.py:
-
-  class LocalRuleAI:
-      
-      def explain_alert(self, alert) -> str:
-          """
-          Uses the alert's type, severity, source_ip, description, 
-          and related device to generate a human-readable explanation.
-          
-          Example for BruteForce alert:
-          "A brute force attack was detected from IP 192.168.1.99 
-           targeting device 192.168.1.10. There were 8 failed login 
-           attempts in 10 minutes. This is a High severity event. 
-           Recommendation: Block IP 192.168.1.99 on your firewall and 
-           review SSH access logs for any successful logins from this 
-           source."
-          """
-      
-      def explain_vulnerability(self, vulnerability) -> str:
-          """
-          Uses CVE ID, severity, service, version, and recommendation.
-          
-          Example:
-          "CVE-2021-41773 was detected on device 192.168.1.10 
-           (Apache 2.4.41 on port 80). This is a Critical severity 
-           path traversal vulnerability that allows attackers to read 
-           files outside the web root. Recommendation: Upgrade Apache 
-           to version 2.4.51 or later immediately."
-          """
-      
-      def explain_risk_score(self, risk_score, factor_breakdown) -> str:
-          """
-          Uses the score, band, and factor_breakdown components.
-          
-          Example:
-          "Device 192.168.1.10 has a risk score of 60 (High). 
-           The score is composed of: 30 points from 1 Critical 
-           vulnerability, 20 points from 1 open Brute Force alert, 
-           and 10 points from 12 open ports. Priority actions: 
-           resolve the open alert and patch the Critical vulnerability."
-          """
-
-=======================================================================
-BACKEND ENDPOINTS
-=======================================================================
-
-POST /api/v1/ai/explain-alert
-  - Body: { "alert_id": "uuid" }
-  - Returns: { "explanation": "<generated text>" }
-  - Administrator and Analyst only. Viewer gets 403.
-
-POST /api/v1/ai/explain-vulnerability
-  - Body: { "vulnerability_id": "uuid" }
-  - Returns: { "explanation": "<generated text>" }
-  - Administrator and Analyst only. Viewer gets 403.
-
-POST /api/v1/ai/explain-risk
-  - Body: { "device_id": "uuid" }
-  - Returns: { "explanation": "<generated text>" }
-  - Administrator and Analyst only. Viewer gets 403.
-
-POST /api/v1/ai/chat
-  - Body: { "message": "Why was this alert generated?", 
-            "context_type": "alert", "context_id": "uuid" }
-  - Returns: { "response": "<generated text>" }
-  - Administrator and Analyst only. Viewer gets 403.
-  - Map common questions to the explain_* methods above.
-  - If the question doesn't match: return a helpful fallback.
-
-FOR ALL AI ENDPOINTS: save conversation history to the database.
-After generating the explanation, write to:
-
-  1. ai_conversations table (schema table 21):
-       organization_id, user_id (from JWT),
-       subject_type ("alert", "vulnerability", or "risk_score"),
-       subject_id (the alert/vuln/device id),
-       provider_type = "local_rule_ai"
-
-  2. ai_messages table (schema table 22):
-       conversation_id (from step 1),
-       role = "user", content = <the question or context>
-     And a second ai_messages row:
-       conversation_id, role = "assistant", content = <the explanation>
-
-=======================================================================
-IMPORTANT: This MUST be designed to be replaceable
-=======================================================================
-
-Create an abstract base class:
-
-  class AIService(ABC):
-      @abstractmethod
-      def explain_alert(self, alert) -> str: ...
-      
-      @abstractmethod  
-      def explain_vulnerability(self, vulnerability) -> str: ...
-      
-      @abstractmethod
-      def explain_risk_score(self, risk_score, factors) -> str: ...
-
-LocalRuleAI implements AIService. This means in a future version, 
-you could swap in OllamaAI or OpenAI without changing the endpoints.
-
-=======================================================================
-TEST BEFORE PUSHING
-=======================================================================
-
-1. Call POST /ai/explain-alert with a real alert_id.
-2. Confirm the response contains a meaningful explanation with 
-   actual data (not placeholder text).
-3. Call POST /ai/explain-risk with a device that has vulnerabilities.
-4. Confirm the explanation references actual vulnerability counts.
-5. pytest tests/ — no regressions.
-
-=======================================================================
-COMMIT MESSAGE
-=======================================================================
-"feat: Phase 19 — local rule-based AI security explanation engine"
-```
+**Verification Checklist:**
+- [ ] `curl` output showing an explanation for a Risk Score.
+- [ ] `curl` output showing an explanation for an Alert.

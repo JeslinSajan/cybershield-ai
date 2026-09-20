@@ -1,149 +1,88 @@
+---START HEADER---
 # Phase 27 — Final Demonstration & Submission
 
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
+
 ---
 
-> **STANDING RULE — VERIFY BEFORE EXECUTING**
-> Before running this prompt, re-read the actual current state of the repo:
-> (1) Check which backend endpoints already exist in backend/app/api/v1/.
-> (2) Check which Alembic migrations have already been run (alembic current).
-> (3) Check which tests already exist in tests/.
-> (4) If the real repo state differs from what this prompt assumes — update
->     this prompt file FIRST, then execute it. Prompts are a living plan,
->     not a frozen snapshot.
+> **STANDING RULE — VERIFY BEFORE EXECUTING**  
+> This prompt was written before execution. Before running it:  
+> (1) Run `alembic current` — confirm which migrations are applied.  
+> (2) Check `backend/app/api/v1/` — note which endpoints already exist (stubs).  
+> (3) Check `tests/` — note which test files already exist.  
+> (4) If reality differs from this prompt's assumptions, update this file first.  
+> Prompts are a living plan, not a frozen snapshot.
 
 ---
 
 ## Prompt
+---END HEADER---
 
-```text
-CYBERSHIELD AI — PHASE 27: Final Demonstration & Submission
+### Scope
+Pre-demo checklist, demo script, viva Q&A prep, git tag.
 
-Repo: https://github.com/JeslinSajan/cybershield-ai
+### PRE-DEMO CHECKS (do the day before):
+- [ ] Open live Vercel URL — click every page, fix any broken ones.
+- [ ] Start agent against production backend — confirm ONLINE in dashboard.
+- [ ] `pytest tests/ -v` — 0 failures. Paste output.
+- [ ] `GET /api/v1/health` and `/health/db` — both return healthy.
+- [ ] `git status` — clean working tree, no uncommitted changes.
 
-=======================================================================
-WHAT TO DO
-=======================================================================
+### DEMO SCRIPT (practice until smooth, ~10 minutes):
+1. Open live web app — show login page.
+2. Login as Administrator — show Dashboard with real counts.
+3. Agents page — point to the agent running on your laptop (status=ONLINE).
+4. Devices page — show discovered devices from the Nmap scan.
+5. Click a device — show device detail.
+6. Vulnerabilities page — show CVE matches with severity badges.
+7. Alerts page — show the BruteForce alert.
+8. Click the alert — change status to Acknowledged. Show the status history timeline below the alert.
+9. Click "Explain with AI" — show the local explanation (label: Local Security Explanation Engine).
+10. Reports page — generate a report, download as PDF, open it.
+11. Threat Intelligence page — show the malicious IP indicators.
+12. Logs page — show collected login events.
 
-Prepare everything for your college final year project demo and 
-submission. This is the last phase — make it count.
+### GITHUB CLEANUP:
+- README.md: add screenshots, live demo link, quick start.
+- .gitignore: verify agent_identity.json, *.db, .env, __pycache__, node_modules are excluded.
+- Tag the final version:
+  ```bash
+  git tag v1.0.0
+  git push origin v1.0.0
+  ```
+  Do NOT force-push the tag if it already exists.
 
-=======================================================================
-FINAL BUG FIX PASS
-=======================================================================
+### VIVA Q&A PREPARATION:
 
-Before preparing the demo, do a final check:
+**Q: Why FastAPI over Django or Flask?**
+A: FastAPI has built-in async support, Pydantic validation, and auto-generates OpenAPI docs. Better for API-only backends without the overhead of Django's ORM magic.
 
-1. Open the live Vercel URL. Click through every page.
-   Fix any broken pages, missing data, or UI errors.
+**Q: Is this real AI? What is the "Local Security Explanation Engine"?**
+A: It is rule-based text generation using actual alert/vulnerability data from the DB. Not an LLM. No external API calls. This is deliberate — it works offline, costs nothing, and is fully explainable. The architecture allows swapping in an LLM later.
 
-2. Start the agent on your laptop pointing to the production backend.
-   Confirm it enrolls and sends heartbeats successfully.
+**Q: Why a standalone agent instead of scanning from the backend?**
+A: The agent runs inside the customer's network. The backend (on Render) cannot reach private IPs inside a local network. The agent bridges this gap.
 
-3. Run pytest tests/ one final time.
-   All tests must pass. Fix any failing tests.
+**Q: How is the system secured?**
+A: JWT + bcrypt for users, separate SHA-256 token auth for agents, RBAC on every endpoint, organization isolation, audit logging, no secrets ever logged.
 
-4. Check that these live URLs work:
-   - Frontend: https://<your-vercel-url>
-   - Backend health: https://cybershield-ai-xnn7.onrender.com/api/v1/health
-   - Backend DB: https://cybershield-ai-xnn7.onrender.com/api/v1/health/db
+**Q: What would you add with more time?**
+A: Real-time WebSocket alerts, email notifications, ML-based anomaly detection, support for more log sources (syslog, Windows Event Log), mobile app.
 
-=======================================================================
-DEMO SCENARIO (practice this before your viva)
-=======================================================================
-
-Run through this exact demo flow. Rehearse it until it is smooth.
-
-1.  Open the live web app. Show the login page.
-2.  Login as Administrator. Show the dashboard.
-    → Point out: agent count, alert count, risk summary cards.
-3.  Go to Agents page. Show the agent status.
-    → "This is the CyberShield Agent running on my laptop."
-4.  Go to Devices page. Show discovered devices from Nmap.
-    → "The agent scanned the authorized local network."
-5.  Click a device. Show its details.
-6.  Go to Vulnerabilities page. Show CVE matches.
-    → "The agent detected services and matched them to known CVEs."
-7.  Go to Alerts page. Show the BruteForce alert.
-    → "The system detected 5+ failed logins from the same IP."
-8.  Click the alert. Change status to Acknowledged.
-    → Show the status history timeline.
-9.  Click "Explain with AI". Show the explanation.
-    → "This is our Local Security Explanation Engine."
-10. Go to Reports page. Generate and download a PDF report.
-    → Open the PDF and show its contents.
-11. Go to Threat Intelligence page. Add a fake malicious IP.
-12. Show the Logs page with collected login events.
-
-Total demo time: ~10 minutes.
-
-=======================================================================
-GITHUB CLEANUP
-=======================================================================
-
-1. Make sure the README.md has:
-   - A clear project description
-   - Screenshots
-   - Live demo link
-   - How to run locally
-
-2. Remove any test database files (.db files) from the repo.
-
-3. Confirm .gitignore includes:
-   agent_identity.json, *.db, .env files, __pycache__, node_modules.
-
-4. Tag the final version:
-   git tag v1.0.0
-   git push origin v1.0.0
-
-=======================================================================
-PRESENTATION SLIDE OUTLINE
-=======================================================================
-
-Slide 1: Title — CyberShield AI: A Local-First Security Monitoring Platform
-Slide 2: Problem — What is a security monitoring platform and why is it needed?
-Slide 3: Solution Overview — Architecture diagram (Agent → Backend → Frontend)
-Slide 4: Key Features — 6 bullet points with screenshots
-Slide 5: The Agent — What it does, how it works
-Slide 6: Threat Detection — Rules engine, example alert
-Slide 7: AI Security Assistant — What it is, what it does, demo screenshot
-Slide 8: Tech Stack — Python, FastAPI, React, PostgreSQL, Vercel/Render/Neon
-Slide 9: Live Demo (switch to browser here)
-Slide 10: Challenges & Learnings
-Slide 11: Future Work — What could be added (real ML, more log sources, etc.)
-Slide 12: Q&A
-
-=======================================================================
-VIVA PREPARATION — QUESTIONS TO PREPARE ANSWERS FOR
-=======================================================================
-
-Q: Why did you choose FastAPI over Django or Flask?
-A: FastAPI is modern, fast, has built-in validation with Pydantic, 
-   automatic API docs, and async support. Better for API-only backends.
-
-Q: Is this real AI? What does "Local Security Explanation Engine" mean?
-A: It is rule-based text generation, not an LLM. The system generates 
-   explanations using the actual alert/vulnerability data and templates.
-   This is more appropriate for MVP and does not require internet access.
-
-Q: Why use an Agent instead of just scanning from the backend?
-A: The Agent runs inside the customer's network and can access local 
-   machines, logs, and network interfaces. The backend cannot directly 
-   access a customer's internal network from the cloud.
-
-Q: How is this secure?
-A: JWT authentication, bcrypt password hashing, RBAC on every endpoint, 
-   separate agent credentials, org isolation, audit logging, 
-   no secrets in logs or code.
-
-Q: What would you add with more time?
-A: Real-time alerts via WebSockets, email notifications, ML-based 
-   anomaly detection, support for more log sources, mobile app.
-
-=======================================================================
-FINAL COMMIT
-=======================================================================
-
-"chore: Phase 27 — final cleanup and v1.0.0 submission tag"
+### FINAL COMMIT:
+```bash
+git commit -m "chore: Phase 27 — demo prep, final cleanup, v1.0.0 tag"
+git push && git push origin v1.0.0
 ```
+
+### System Standing Rules Reminders:
+- Local-first: LocalRuleAI only, no external AI API ever.
+- Vercel + Render + Neon. No Docker Compose.
+- Never log secrets at any log level.
+- Pin every new dependency version explicitly.
+- Every endpoint traces to a FR in docs/srs/functional-requirements.md.
+- Check docs/api/*.md — new endpoints must be documented first.
+- Run alembic current before assuming tables exist.
+- Never force-push.
+- Verification checklist requires actual evidence (pytest output, curl).

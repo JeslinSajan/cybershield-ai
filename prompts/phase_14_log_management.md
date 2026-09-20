@@ -2,108 +2,45 @@
 
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
+
 ---
 
-> **STANDING RULE — VERIFY BEFORE EXECUTING**
-> Before running this prompt, re-read the actual current state of the repo:
-> (1) Check which backend endpoints already exist in backend/app/api/v1/.
-> (2) Check which Alembic migrations have already been run (alembic current).
-> (3) Check which tests already exist in tests/.
-> (4) If the real repo state differs from what this prompt assumes — update
->     this prompt file FIRST, then execute it. Prompts are a living plan,
->     not a frozen snapshot.
+> **STANDING RULE — VERIFY BEFORE EXECUTING**  
+> This prompt was written before execution. Before running it:
+> (1) Run `alembic current` — confirm which migrations are applied.
+> (2) Check `backend/app/api/v1/` — note which endpoints already exist.
+> (3) Check `tests/` — note which test files already exist.
+> (4) If reality differs from this prompt's assumptions, update this file first, then execute.
+> Prompts are a living plan, not a frozen snapshot.
 
 ---
 
 ## Prompt
 
-```text
-CYBERSHIELD AI — PHASE 14: Log Management
+**Scope:**
+1. **Agent Implementation**: 
+   - Collect auth logs: `auth.log` on Linux or Windows Security Event Log.
+   - Windows fallback: if `pywin32` is not installed, log a warning and return an empty list. Do NOT crash, and do not make `pywin32` mandatory in requirements. Add a note to `agent/README.md`.
+   - Send logs to `POST /api/v1/agents/logs` using agent credentials (NOT a user JWT).
+   - Track `last_sent_timestamp` locally on the agent to avoid re-sending logs.
+2. **Backend Endpoints (in backend/app/api/v1/logs.py and agents.py)**:
+   - `POST /api/v1/agents/logs`: An AGENT endpoint. Document in `docs/api/agent-api.md`.
+   - `GET /api/v1/logs/`: `get_any_authenticated_user`, filters: `event_type`, `source`, `from_date`, `to_date`, `limit`/`offset`.
+   - `GET /api/v1/logs/{id}`: `get_any_authenticated_user`.
+3. **Database**:
+   - `Log` model columns: `id`, `organization_id`, `agent_id`, `device_id` (nullable), `source`, `event_type`, `severity`, `message`, `source_ip` (INET), `username`, `timestamp`, `created_at`, `updated_at`.
+   - Detect if the model exists in `models/`; if not, create it and run a migration. `source_ip` is stored as INET in Postgres but passed as a string (SQLAlchemy handles this).
+   - Mapping: `login_failure` → `medium`, `login_success` → `low`, unknown → `info`.
+   - `event_type` must be exact: `'login_success'`, `'login_failure'`.
 
-Repo: https://github.com/JeslinSajan/cybershield-ai
+**Rules & Constraints:**
+- Use the actual error envelope shape for all exceptions.
+- Rely only on exact RBAC: `get_any_authenticated_user` for user endpoints.
+- Update `docs/api/` as needed. No external AI.
+- Never log secrets.
+- Test against Neon DB.
 
-=======================================================================
-WHAT TO BUILD
-=======================================================================
-
-The agent reads system log files (auth.log on Linux, Windows Event 
-Log on Windows), parses them, and sends them to the backend.
-The backend stores the logs in a normalized format.
-
-=======================================================================
-AGENT SIDE
-=======================================================================
-
-Add agent/collectors/log_collector.py:
-
-For Linux:
-  def collect_auth_logs(max_lines=100) -> list:
-      """
-      Read the last max_lines lines from /var/log/auth.log.
-      Parse each line and return:
-        [
-          {
-            "timestamp": "2026-09-17T10:00:00",
-            "source": "auth.log",
-            "event_type": "login_success" or "login_failure",
-            "username": "root",
-            "source_ip": "192.168.1.5",
-            "message": "<raw log line>"
-          }
-        ]
-      Detect login_failure for lines containing "Failed password".
-      Detect login_success for lines containing "Accepted password".
-      """
-
-For Windows (if running on Windows):
-  Use the pywin32 library to read Windows Security Event Log.
-  Event ID 4624 = login success.
-  Event ID 4625 = login failure.
-  Fall back gracefully if pywin32 is not installed (log a warning).
-
-Run log collection every 60 seconds.
-POST collected logs to /agents/logs (new endpoint, see below).
-Only send new logs — track the last sent timestamp in a local file.
-
-=======================================================================
-BACKEND SIDE
-=======================================================================
-
-New endpoint:
-  POST /api/v1/agents/logs
-    - Agent credential required.
-    - Accepts a list of log entries.
-    - For each entry, create a row in the logs table with:
-        agent_id, organization_id, source, event_type, severity,
-        message, source_ip, username, timestamp.
-    - Set severity based on event_type:
-        login_failure → "medium"
-        login_success → "low"
-        unknown → "info"
-
-Read endpoints:
-  GET /api/v1/logs/
-    - Admin/Analyst only.
-    - Supports query params: ?source=auth.log&event_type=login_failure
-      &from=<date>&to=<date>&limit=100
-  
-  GET /api/v1/logs/{id}
-    - Admin/Analyst only.
-
-=======================================================================
-TEST BEFORE PUSHING
-=======================================================================
-
-1. Run the agent on a Linux machine (or dev machine with mock data).
-2. Confirm log entries appear in GET /api/v1/logs/.
-3. Filter by event_type=login_failure — confirm it works.
-4. pytest tests/ — no regressions.
-
-Note: If testing on Windows without auth.log, create a 
-mock log file at a configurable path for testing purposes.
-
-=======================================================================
-COMMIT MESSAGE
-=======================================================================
-"feat: Phase 14 — log collection and normalized log storage"
-```
+**Verification Checklist:**
+- [ ] Provide output of `pytest` testing the log endpoints.
+- [ ] Provide `curl` output of a test `POST` to `/api/v1/agents/logs`.
+- [ ] Ensure `pywin32` is explicitly mentioned as optional in `agent/README.md`.

@@ -1,99 +1,85 @@
+---START HEADER---
 # Phase 22 — Security Hardening
 
 **Status:** Not Started  
 *(Change to "Done" when this phase is complete)*
+
 ---
 
-> **STANDING RULE — VERIFY BEFORE EXECUTING**
-> Before running this prompt, re-read the actual current state of the repo:
-> (1) Check which backend endpoints already exist in backend/app/api/v1/.
-> (2) Check which Alembic migrations have already been run (alembic current).
-> (3) Check which tests already exist in tests/.
-> (4) If the real repo state differs from what this prompt assumes — update
->     this prompt file FIRST, then execute it. Prompts are a living plan,
->     not a frozen snapshot.
+> **STANDING RULE — VERIFY BEFORE EXECUTING**  
+> This prompt was written before execution. Before running it:  
+> (1) Run `alembic current` — confirm which migrations are applied.  
+> (2) Check `backend/app/api/v1/` — note which endpoints already exist (stubs).  
+> (3) Check `tests/` — note which test files already exist.  
+> (4) If reality differs from this prompt's assumptions, update this file first.  
+> Prompts are a living plan, not a frozen snapshot.
 
 ---
 
 ## Prompt
+---END HEADER---
 
-```text
-CYBERSHIELD AI — PHASE 22: Security Hardening
+### Scope
+Fix 6 specific security issues. No enterprise overkill.
 
-Repo: https://github.com/JeslinSajan/cybershield-ai
+#### 1. RATE LIMITING on POST /auth/login only
+Use slowapi==0.1.9. Add to backend/requirements.txt with this exact pin.
+Limit: 10 requests per minute per IP.
+On exceed: 429 Too Many Requests with error envelope:
+`{"error": {"code": "RATE_LIMITED", "message": "Too many requests. Try again later.", "details": []}}`
+Add the slowapi Limiter to main.py and add SlowAPIMiddleware.
 
-=======================================================================
-WHAT TO BUILD
-=======================================================================
+#### 2. SECURE RESPONSE HEADERS via FastAPI middleware
+Add to main.py:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: strict-origin-when-cross-origin`
 
-Review the system as a security product and fix the most important 
-security issues. This phase is about correctness, not perfection.
+#### 3. CORS
+Review CORS_ORIGINS in production .env.
+In production: CORS_ORIGINS must be the Vercel URL only, never "*".
+Confirm main.py already handles this (it does via settings.CORS_ORIGINS).
+Add a note in backend/.env.example: `# PRODUCTION: set to https://your-vercel-url.vercel.app`
 
-=======================================================================
-CHECKLIST — DO ALL OF THESE
-=======================================================================
+#### 4. ORGANIZATION ISOLATION AUDIT
+Check EVERY list endpoint (GET /devices/, GET /alerts/, GET /logs/, etc.).
+Every query must filter by organization_id from the JWT user's organization.
+How to get org_id: user.organization_id (loaded from DB in get_current_user).
+If any endpoint is missing the org filter: add it now.
+Test: create 2 organizations with separate users. Confirm user A cannot see user B's data.
 
-1. INPUT VALIDATION
-   - Every POST/PATCH endpoint must validate and reject unexpected 
-     fields (use Pydantic models — already in place, just verify).
-   - IP addresses in log/device endpoints must be validated as valid 
-     IP format.
-   - Text fields must have max length limits set in Pydantic schemas.
+#### 5. ERROR MESSAGES in production
+In the general exception handler in main.py (already exists):
+Confirm it returns INTERNAL_SERVER_ERROR code with no stack trace.
+Add check: if settings.DEBUG is True, include exc details in response (dev only).
+In production (ENVIRONMENT=production), never expose exception details.
 
-2. RATE LIMITING
-   - Add rate limiting to POST /auth/login only.
-   - Use slowapi (pip install slowapi): 10 requests per minute per IP.
-   - Return 429 Too Many Requests if exceeded.
-   - Add slowapi to requirements.txt.
+#### 6. AUDIT LOG COMPLETENESS
+Confirm these actions write to audit_logs (AuditLog model: organization_id, actor_type, actor_id, action, target_type, target_id, details (JSONB), created_at):
+- User login: action='user_login'
+- Failed login: action='user_login_failed'
+- Agent enrolled: action='agent_enrolled'
+- Agent revoked: action='agent_revoked'
+- Scan created: action='scan_created'
+- Alert status changed: action='alert_status_changed'
+- Report generated: action='report_generated'
+For any missing: add the AuditLog write now.
 
-3. SECURE HEADERS
-   - Add these response headers to all API responses via FastAPI 
-     middleware:
-       X-Content-Type-Options: nosniff
-       X-Frame-Options: DENY
-       Referrer-Policy: strict-origin-when-cross-origin
+### Required Verification Checklist:
+- [ ] POST /auth/login 11x rapidly → paste 429 response.
+- [ ] GET any response → confirm X-Content-Type-Options header present.
+- [ ] Create 2 orgs, confirm data isolation.
+- [ ] pytest tests/ -v — 0 regressions.
 
-4. CORS
-   - Review CORS settings. Ensure CORS_ORIGINS in production is 
-     set to only the Vercel frontend URL, not "*".
-   - Confirm this is already set correctly in app/main.py.
-
-5. ORGANIZATION ISOLATION
-   - Audit every list endpoint (GET /devices/, GET /alerts/, etc.)
-   - Confirm EVERY query filters by organization_id from 
-     the logged-in user's token.
-   - If any query is missing the org filter: add it.
-   - This prevents one user seeing another organization's data.
-
-6. ERROR MESSAGES
-   - Confirm error responses never leak stack traces in production.
-   - Set DEBUG=False in production .env.
-   - The general exception handler in main.py should only return 
-     "An unexpected error occurred" — never the raw exception message.
-
-7. AUDIT LOG ENTRIES
-   - Confirm these events are already writing to audit_logs table:
-       User login / failed login
-       Agent enrolled / revoked
-       Scan started
-       Alert status changed
-       Report generated
-   - If any are missing: add them.
-
-=======================================================================
-TEST BEFORE PUSHING
-=======================================================================
-
-1. Hit POST /auth/login 11 times rapidly — confirm 429 on the 11th.
-2. Confirm API responses include X-Content-Type-Options header.
-3. Create two organizations with users — confirm user A cannot see 
-   user B's devices/alerts.
-4. With DEBUG=False, trigger a 500 error — confirm no stack trace 
-   in the response body.
-5. pytest tests/ — no regressions.
-
-=======================================================================
-COMMIT MESSAGE
-=======================================================================
-"feat: Phase 22 — security hardening (rate limiting, headers, org isolation, audit)"
-```
+### System Standing Rules Reminders:
+- Local-first: LocalRuleAI only, no external AI API ever.
+- Vercel + Render + Neon. No Docker Compose.
+- Never log secrets at any log level (DATABASE_URL, JWT_SECRET, agent credentials, passwords).
+- Pin every new dependency version explicitly.
+- Every endpoint traces to a FR in docs/srs/functional-requirements.md.
+- Check docs/api/*.md — new endpoints must be documented first.
+- Run alembic current before assuming tables exist.
+- Never force-push.
+- Verification checklist requires actual evidence (pytest output, curl).
+- Error Envelope: `{"error": {"code": "...", "message": "...", "details": []}}`
+- RBAC dependencies: `get_current_admin`, `get_current_analyst_or_admin`, `get_any_authenticated_user`
