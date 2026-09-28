@@ -13,9 +13,27 @@
 > (3) Check `tests/` — note which test files already exist.  
 > (4) If reality differs from this prompt's assumptions, update this file first.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 24/25: live system; `docs/screenshots/` with real screenshots
+
+## PRODUCES
+`docs/INSTALLATION.md`, `docs/USER_MANUAL.md`, `docs/ARCHITECTURE.md`, `docs/API_REFERENCE.md`, updated `README.md`
+
+**Consumed by:** Phase 27 (demo and submission)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append doc file list and README screenshot links to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 ---END HEADER---
 

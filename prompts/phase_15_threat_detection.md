@@ -12,9 +12,27 @@
 > (3) Check `tests/` — note which test files already exist.
 > (4) If reality differs from this prompt's assumptions, update this file first, then execute.
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 13: `Vulnerability` rows; Phase 14: `Log` rows with `source_ip`; `Alert`/`AlertEvent`/`Notification` models from migration 001
+
+## PRODUCES
+`Alert` rows (types: `brute_force`, `port_scan`, `suspicious_login`); `Notification` rows for High/Critical; `detection_service.py`; **Alert.risk_score provisionally set** (High=40, Medium=20, Low=10) — Phase 17 backfills
+
+**Consumed by:** Phase 16 (alert management), Phase 17 (risk backfill), Phase 19 (AI explanation), Phase 21 (alerts UI)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append alert creation payload (all columns), deduplication key, and notification creation to `prompts/HANDOFF.md`. Note provisional risk_score values.
+
+---
 ## Prompt
 
 **Scope:**

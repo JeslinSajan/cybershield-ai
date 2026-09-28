@@ -13,9 +13,27 @@
 > (3) Check `tests/` — note which test files already exist.  
 > (4) If reality differs from this prompt's assumptions, update this file first.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 23: 0 test failures; `backend/.python-version=3.12.7`; all env vars set in Render
+
+## PRODUCES
+Live Vercel URL; live Render backend URL; all migrations on Neon; `docs/PHASE24_DEPLOYMENT.md`
+
+**Consumed by:** Phase 25 (performance baseline), Phase 27 (demo)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append live URLs, `/health` and `/health/db` responses, and Neon migration confirmation to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 ---END HEADER---
 

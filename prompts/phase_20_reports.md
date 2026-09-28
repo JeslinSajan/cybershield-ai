@@ -12,9 +12,27 @@
 > (3) Check `tests/` — note which test files already exist.
 > (4) If reality differs from this prompt's assumptions, update this file first, then execute.
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 13–17: data for reports; `Report` model from migration 001; `fpdf2==2.7.9` added to `backend/requirements.txt`
+
+## PRODUCES
+`Report` rows in DB; PDF + CSV file generation; `POST /reports/`, `GET /reports/`, `GET /reports/{id}/download` endpoints; `backend/generated_reports/` directory
+
+**Consumed by:** Phase 21 (reports UI), Phase 27 (demo)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append `Report` column names, PDF file path pattern, and download endpoint response headers to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 **Scope:**

@@ -12,9 +12,27 @@
 > (3) Check `tests/` — note which test files already exist.  
 > (4) If reality differs from this prompt's assumptions, update this file first, then execute.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 7/8: `get_current_admin`, `get_current_analyst_or_admin`, `get_any_authenticated_user` deps; migration `001_initial_schema` (agents, agent_credentials, agent_heartbeats tables); `AuditLog` model; error envelope shape
+
+## PRODUCES
+`require_agent_credential()` dep in `deps.py`; running `agent/` app; `POST /agents/enrollment-token`, `POST /agents/register`, `POST /agents/heartbeat`, `GET /agents/`, `GET /agents/{id}`, `POST /agents/{id}/revoke` endpoints; DB pool resilience (S1) in `database.py`; `DATABASE_URL_DIRECT` env var
+
+**Consumed by:** Phase 10 (task polling), Phase 21 (agent UI)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append `require_agent_credential()` signature, enrollment flow payload, heartbeat response shape, and DB pool settings to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 ```text
@@ -81,7 +99,50 @@ If any are missing:
   alembic revision --autogenerate -m "phase9_agent_tables"
   alembic upgrade head
 
-Confirm with: alembic current → shows latest revision.
+Confirm: alembic current → shows latest revision applied.
+
+=======================================================================
+STEP 1b — DATABASE CONNECTION RESILIENCE (REQUIRED — see S1 in
+          prompts/00_shared_standards.md)
+=======================================================================
+
+Implement ALL of the following in backend/app/core/database.py now.
+This is NOT optional and NOT deferred to Phase 25.
+
+1. Pool settings for Neon free tier:
+   Replace the current bare create_engine() call with:
+     create_engine(
+         db_url,
+         pool_pre_ping=True,
+         pool_recycle=300,
+         pool_size=2,
+         max_overflow=3,
+         connect_args={
+             "connect_timeout": 10,
+             "keepalives": 1,
+             "keepalives_idle": 30,
+             "keepalives_interval": 10,
+             "keepalives_count": 5,
+             "prepare_threshold": None,   # disable prepared stmts for PgBouncer
+         },
+     )
+   VERIFY the connect_args key names against psycopg3 docs before coding.
+
+2. Add DATABASE_URL_DIRECT to backend/.env.example:
+     # Direct (non-pooler) URL — used by Alembic migrations only
+     DATABASE_URL_DIRECT=postgresql+psycopg://...direct...
+   Add DATABASE_URL_DIRECT to backend/app/core/config.py as an
+   Optional[str] field (defaults to None — falls back to DATABASE_URL).
+   Update alembic/env.py to use DATABASE_URL_DIRECT when set.
+
+3. Add bounded retry to test_db_connection() for Neon wake-up:
+   See exact implementation in prompts/00_shared_standards.md S1.3.
+   Do NOT add retry to get_db() (the per-request path).
+
+4. Add AGENT_OFFLINE_MISSED_THRESHOLD=3 and HEARTBEAT_INTERVAL_SECONDS=30
+   to config.py and .env.example. Update the offline detection task to use
+   threshold × interval for the cutoff (90s), not a hardcoded seconds value.
+
 
 =======================================================================
 STEP 2 — BACKEND: COMPLETE AGENT ENDPOINTS

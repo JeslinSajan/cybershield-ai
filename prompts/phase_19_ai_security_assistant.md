@@ -12,9 +12,27 @@
 > (3) Check `tests/` — note which test files already exist.
 > (4) If reality differs from this prompt's assumptions, update this file first, then execute.
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 15: Alert rows; Phase 13: Vulnerability+CVE rows; Phase 17: RiskScore rows (`factor_breakdown` stored as Text/JSON string); `AIConversation`/`AIMessage` models (verify `models/ai.py`)
+
+## PRODUCES
+`POST /ai/explain-alert`, `/explain-vulnerability`, `/explain-risk`, `/ai/chat` endpoints; `LocalRuleAI` class; `AIConversation`/`AIMessage` rows saved per call
+
+**Consumed by:** Phase 21 (AI assistant UI), Phase 27 (demo)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append `LocalRuleAI` method signatures, `AIConversation` insert payload, and example explanation output to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 **Scope:**

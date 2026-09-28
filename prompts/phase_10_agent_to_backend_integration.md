@@ -12,9 +12,27 @@
 > (3) Check `backend/app/core/deps.py` — confirm `require_agent_credential()` exists from Phase 9.  
 > (4) If Phase 9 is incomplete, finish it before starting Phase 10.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 9: `require_agent_credential()` dep, Agent rows in DB, `agent/api_client.py`; `Scan`/`ScanResult` models from migration 001
+
+## PRODUCES
+`GET /agents/tasks`, `POST /agents/tasks/{id}/status`, `POST /agents/results`, `POST /agents/{id}/rotate-credential` endpoints; `agent/task_poller.py`; `agent/offline_queue.py`; `upload_id` column on `scan_results` (migration needed)
+
+**Consumed by:** Phase 11 (discovery results), Phase 13 (vuln results), Phase 14 (logs)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append task payload shape, result payload shape, offline queue API, and `upload_id` migration details to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 ```text
@@ -44,6 +62,46 @@ STEP 0 — READ FIRST (verify before executing)
   docs/api/agent-api.md — confirm GET /agents/tasks, POST /agents/tasks/{id}/status,
     POST /agents/results are documented. They were added in Phase 4.
     If not, add them before implementing.
+
+  prompts/HANDOFF.md — read to confirm Phase 9 actual produced artifacts before coding.
+
+=======================================================================
+STEP 0b — AGENT RESILIENCE BASELINE (REQUIRED — see S3 in
+           prompts/00_shared_standards.md)
+=======================================================================
+
+This MUST be implemented in Phase 10. It is NOT deferred to Phase 25.
+
+If Phase 9 did not fully implement the following, do it now:
+
+A. EXPONENTIAL BACKOFF WITH JITTER in agent/api_client.py
+   For ConnectionError, TimeoutError, 502/503/504: retry up to 3 times.
+   Backoff: min(2 * 2^attempt + random.uniform(0, 1), 30) seconds.
+   401 and 403 are terminal — log and stop, do not retry.
+
+B. FIRST-REQUEST TIMEOUT
+   self._first_request_done = False
+   Timeout = 90s until first success; 10s thereafter.
+   90s allows for Render cold start.
+
+C. IDEMPOTENT RESULT UPLOADS (upload_id)
+   Agent generates UUID4 upload_id per upload attempt.
+   Saved to a temp file so it persists across retry attempts.
+   Backend: add upload_id VARCHAR(36) to scan_results table (migration needed).
+   Before inserting: check if scan_results row with same upload_id exists.
+   If yes: return 200 without re-inserting.
+
+D. IDEMPOTENT HEARTBEATS
+   Backend: check if agent_heartbeats row with same (agent_id, timestamp) exists.
+   If yes: discard silently, return 200.
+   Use INSERT ... ON CONFLICT DO NOTHING if your ORM supports it, or query first.
+
+E. BOUNDED OFFLINE QUEUE in agent/offline_queue.py
+   When backend is unreachable (after retries exhausted):
+     Enqueue heartbeat/result to OfflineQueue (MAX_QUEUE_SIZE=100).
+     Drop oldest on overflow with a warning log.
+   On reconnect: drain queue before resuming normal loop.
+   Implement agent/offline_queue.py now.
 
 =======================================================================
 STEP 1 — BACKEND: GET /agents/tasks

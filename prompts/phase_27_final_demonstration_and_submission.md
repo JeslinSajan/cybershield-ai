@@ -13,9 +13,27 @@
 > (3) Check `tests/` — note which test files already exist.  
 > (4) If reality differs from this prompt's assumptions, update this file first.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+All phases done; `v1.0.0` tag; live demo working
+
+## PRODUCES
+Demo rehearsed; viva Q&A prepared; `v1.0.0` tag pushed
+
+**Consumed by:** — (final phase)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append demo run date, any issues encountered, and final `pytest` output to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 ---END HEADER---
 

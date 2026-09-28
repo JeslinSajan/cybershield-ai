@@ -1,4 +1,3 @@
----START HEADER---
 # Phase 25 — Performance & Reliability
 
 **Status:** Not Started  
@@ -13,14 +12,36 @@
 > (3) Check `tests/` — note which test files already exist.  
 > (4) If reality differs from this prompt's assumptions, update this file first.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
-## Prompt
----END HEADER---
 
-### Scope
-Targeted, minimal changes to ensure demo stability. No premature optimization.
+---
+
+## DEPENDS ON
+Phase 24: live system; Phase 9/10: resilience baseline already done
+
+## PRODUCES
+Pagination confirmed on all list endpoints; heartbeat cleanup task; agent startup retry; frontend auto-refresh
+
+**Consumed by:** Phase 26 (docs), Phase 27 (demo)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append any performance changes made and evidence they work to `prompts/HANDOFF.md`.
+
+---
+## Prompt
+
+> **Scope note:** Connection resilience (DB pool settings, agent exponential
+> backoff, offline queue, idempotent uploads) is **Phase 9/10 baseline work**
+> specified in `prompts/00_shared_standards.md` S1–S3. If it was not done
+> there, do it now before anything else in this phase. Phase 25 only covers
+> improvements on top of a working, resilient system.
+
+### What Phase 25 covers
 
 #### 1. MISSING INDEXES
 Check these queries via EXPLAIN ANALYZE in Neon's SQL editor:

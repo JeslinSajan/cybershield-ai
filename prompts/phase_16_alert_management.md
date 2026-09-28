@@ -12,9 +12,27 @@
 > (3) Check `tests/` — note which test files already exist.
 > (4) If reality differs from this prompt's assumptions, update this file first, then execute.
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 15: `Alert` rows in DB; `AlertEvent` model from migration 001
+
+## PRODUCES
+`PATCH /alerts/{id}` (status transitions); `AlertEvent` rows; `GET /alerts/summary`; `GET /alerts/{id}/history`; `GET /alerts/` endpoint
+
+**Consumed by:** Phase 17 (recalculate risk on Resolved/False Positive), Phase 19 (AI explanation), Phase 21 (alert UI)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append valid status transitions list, `AlertEvent` column usage, and `/alerts/summary` response shape to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 **Scope:**

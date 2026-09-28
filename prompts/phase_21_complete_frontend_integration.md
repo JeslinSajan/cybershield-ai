@@ -13,9 +13,27 @@
 > (3) Check `tests/` — note which test files already exist.  
 > (4) If reality differs from this prompt's assumptions, update this file first.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+All Phase 9–20 endpoints live; JWT auth working; Vercel project configured
+
+## PRODUCES
+Full React app deployed to Vercel; 13 pages connected to real API; RBAC-enforced UI; notifications bell; `VITE_API_BASE_URL` in Vercel env
+
+**Consumed by:** Phase 24 (deployment URL), Phase 27 (demo)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append live Vercel URL, which pages exist, and RBAC enforcement test results to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 ---END HEADER---
 

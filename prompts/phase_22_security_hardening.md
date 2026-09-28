@@ -13,9 +13,27 @@
 > (3) Check `tests/` — note which test files already exist.  
 > (4) If reality differs from this prompt's assumptions, update this file first.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 21 all endpoints live; `slowapi==0.1.9` added to requirements
+
+## PRODUCES
+Rate limiting on login; secure response headers; confirmed org isolation; audit log completeness
+
+**Consumed by:** Phase 23 (tests include rate limit), Phase 24 (production security)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append rate limit config, header names added, and org isolation test evidence to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 ---END HEADER---
 

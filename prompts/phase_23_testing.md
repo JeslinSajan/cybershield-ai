@@ -13,9 +13,27 @@
 > (3) Check `tests/` — note which test files already exist.  
 > (4) If reality differs from this prompt's assumptions, update this file first.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+All Phase 9–22 work complete
+
+## PRODUCES
+16 test files; `docs/PHASE23_TEST_RESULTS.md` with pytest output
+
+**Consumed by:** Phase 24 (must pass before deploy)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append `pytest tests/ -v` full output to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 ---END HEADER---
 

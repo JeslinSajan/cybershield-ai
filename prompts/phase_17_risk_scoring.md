@@ -12,9 +12,27 @@
 > (3) Check `tests/` — note which test files already exist.
 > (4) If reality differs from this prompt's assumptions, update this file first, then execute.
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 13: `Vulnerability` rows; Phase 15/16: `Alert` rows; Phase 11: `ScanResult` rows with `result_type='services'`; `RiskScore` model (`factor_breakdown` is `Column(Text)` not JSONB)
+
+## PRODUCES
+`RiskScore` rows (entity_type='device'); `risk_service.calculate_device_risk(db, device_id, org_id)` function; `GET /devices/{id}/risk`, `GET /risk-scores/` endpoints; **backfills `alerts.risk_score`** for open alerts on device
+
+**Consumed by:** Phase 19 (AI explains risk), Phase 21 (risk display)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append `RiskScore` insert payload (all columns), `factor_breakdown` JSON structure, formula constants, and band thresholds to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 **Scope:**

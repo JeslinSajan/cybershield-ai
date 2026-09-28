@@ -12,9 +12,27 @@
 > (3) Check if `device_interfaces` table exists. Create migration if not.  
 > (4) Verify POST /agents/heartbeat implementation from Phase 9 — Phase 12 extends it.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 9: `AgentHeartbeat.details` is JSONB; Phase 11: `DeviceInterface` model and table confirmed
+
+## PRODUCES
+Network stats in `agent_heartbeats.details["network"]`; upserted `device_interfaces` rows; `GET /agents/{id}/network-stats` endpoint
+
+**Consumed by:** Phase 21 (network stats display)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append network stats payload shape (`{interfaces: [...], active_connections: N}`) and interface columns used in upsert to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 ```text

@@ -13,9 +13,27 @@
 > (4) Check `backend/app/api/v1/scans.py` — already a stub; POST /scans/ goes here.  
 > (5) Verify docs/api/ has device and scan endpoints documented. Add if missing.  
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 10: `POST /agents/results` working; `devices` table from migration 001; `Device` model confirmed; `Scan`/`ScanResult` models
+
+## PRODUCES
+Device rows in DB; `DeviceInterface` model + migration; `GET /devices/`, `GET /devices/{id}`, `POST /scans/`, `GET /scans/`, `GET /scans/{id}` endpoints; `process_discovery_result()` service function; `docs/api/devices-api.md`
+
+**Consumed by:** Phase 12 (interface stats), Phase 13 (vuln linking), Phase 17 (open-port count), Phase 21 (device UI)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append `Device` column list as confirmed from actual migration, discovery result payload shape, and scan creation request/response to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 ```text

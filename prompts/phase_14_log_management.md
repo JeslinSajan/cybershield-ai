@@ -12,9 +12,27 @@
 > (3) Check `tests/` — note which test files already exist.
 > (4) If reality differs from this prompt's assumptions, update this file first, then execute.
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 9/10: `require_agent_credential()`, agent running; `logs` table from migration 001 (verify column names before coding)
+
+## PRODUCES
+`Log` rows in DB; `POST /agents/logs` endpoint (agent auth); `GET /logs/`, `GET /logs/{id}` endpoints (JWT); `agent/collectors/log_collector.py`
+
+**Consumed by:** Phase 15 (brute force / suspicious login rules), Phase 18 (indicator matching), Phase 21 (logs UI)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append confirmed `logs` table column names, log event payload shape, and `event_type` valid values to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 **Scope:**

@@ -12,9 +12,27 @@
 > (3) Check `tests/` — note which test files already exist.
 > (4) If reality differs from this prompt's assumptions, update this file first, then execute.
 > Prompts are a living plan, not a frozen snapshot.
+> **Standards:** Follow [`prompts/00_shared_standards.md`](prompts/00_shared_standards.md) — all S1–S9 rules apply to this phase.
+
 
 ---
 
+
+---
+
+## DEPENDS ON
+Phase 14: log save handler (must be extended); `ThreatIndicator` model (verify which migration created it)
+
+## PRODUCES
+`ThreatIndicator` rows (seed + user); `POST /threat-intelligence/`, `GET /threat-intelligence/`, `DELETE /threat-intelligence/{id}` endpoints; `malware_indicator` alert type on IP match
+
+**Consumed by:** Phase 21 (threat intel UI)
+
+## HANDOFF REQUIREMENT
+On completing this phase, append an entry to `prompts/HANDOFF.md`.
+Append `ThreatIndicator` column names, indicator matching logic location in codebase, and seed file path to `prompts/HANDOFF.md`.
+
+---
 ## Prompt
 
 **Scope:**
