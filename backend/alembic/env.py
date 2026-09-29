@@ -13,9 +13,16 @@ from app.models import *  # noqa: F401, F403
 # access to the values within the .ini file in use.
 config = context.config
 
-# Override sqlalchemy.url with DATABASE_URL from environment
-if os.getenv("DATABASE_URL"):
-    config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL"))
+# Override sqlalchemy.url with DATABASE_URL_DIRECT (preferred for migrations)
+# or fall back to DATABASE_URL
+db_url = os.getenv("DATABASE_URL_DIRECT") or os.getenv("DATABASE_URL")
+if db_url:
+    # Normalize postgres:// -> postgresql+psycopg://
+    if db_url.startswith("postgres://") and not db_url.startswith("postgres+"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+    elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

@@ -109,6 +109,27 @@ Indexes: `idx_agents_org_status`, `idx_agents_last_heartbeat`, `idx_agents_activ
 
 Note: `hostname` is intentionally not unique. Hostnames can be reused, can change after a system rename, and are not a stable identity for an Agent. The stable identity is the UUID `id` on the `agents` table; all foreign-key references and audit records point to that agent_id.
 
+## 6b. agent_enrollment_tokens (Phase 9)
+
+Purpose: one-time enrollment tokens that allow an agent to self-register.
+
+DB-persisted (not in-memory) so tokens survive Render restarts, cold-start wake-ups, and deploys.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | |
+| organization_id | UUID | FK → organizations.id (CASCADE), NOT NULL | Which org this token enrolls into |
+| created_by_user_id | UUID | FK → users.id, NOT NULL | Admin who generated the token |
+| token_hash | VARCHAR(64) | UNIQUE NOT NULL | SHA-256 hex digest of the raw token — raw token never stored |
+| agent_name_hint | VARCHAR(120) | NULL | Optional label set by admin at creation |
+| expires_at | TIMESTAMPTZ | NOT NULL | Token validity window (default 60 min) |
+| used_at | TIMESTAMPTZ | NULL | Set on consumption; NULL = not yet used (single-use enforced) |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | |
+
+Indexes: `idx_enrollment_tokens_org`, `idx_enrollment_tokens_hash` (unique), `idx_enrollment_tokens_expires`.
+
+Token lifecycle: Admin generates → raw token returned once to client, only hash stored → Agent POSTs raw token to `/agents/register` → `used_at` set, token consumed → further attempts rejected (already used or expired).
+
 ## 7. agent_credentials
 
 Purpose: separate credentials for the non-human Agent actor.

@@ -1,6 +1,7 @@
 from app.models.organization import Organization, Role, Permission, RolePermission
 from app.models.user import User
 from app.models.agent import Agent, AgentCredential, AgentHeartbeat
+from app.models.enrollment_token import AgentEnrollmentToken
 from app.models.device import Device, DeviceInterface
 from app.models.scan import Scan, ScanResult, CVE, Vulnerability
 from app.models.log import Log, ThreatIndicator
@@ -18,6 +19,7 @@ __all__ = [
     "Agent",
     "AgentCredential",
     "AgentHeartbeat",
+    "AgentEnrollmentToken",
     "Device",
     "DeviceInterface",
     "Scan",

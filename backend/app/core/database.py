@@ -38,12 +38,26 @@ def get_engine():
     if _engine is None:
         settings = get_settings()
         db_url = _normalize_db_url(settings.DATABASE_URL)
-        _engine = create_engine(
-            db_url,
-            pool_pre_ping=True,
-            echo=settings.DEBUG,
-            future=True
-        )
+        if db_url.startswith("sqlite"):
+            _engine = create_engine(db_url, connect_args={"check_same_thread": False}, echo=settings.DEBUG, future=True)
+        else:
+            _engine = create_engine(
+                db_url, 
+                pool_pre_ping=True, 
+                pool_recycle=300, 
+                pool_size=2, 
+                max_overflow=3,
+                connect_args={
+                    "connect_timeout": 10, 
+                    "keepalives": 1, 
+                    "keepalives_idle": 30,
+                    "keepalives_interval": 10, 
+                    "keepalives_count": 5, 
+                    "prepare_threshold": None
+                },
+                echo=settings.DEBUG, 
+                future=True
+            )
         logger.info("Database engine created successfully")
     return _engine
 
@@ -60,6 +74,11 @@ def get_session_factory():
             class_=Session
         )
     return _SessionLocal
+
+
+def SessionLocal():
+    """Convenience function for background tasks that need a DB session."""
+    return get_session_factory()()
 
 
 def init_db():
@@ -88,14 +107,27 @@ def get_db():
         db.close()
 
 
+from sqlalchemy.exc import OperationalError
+import time
+MAX_DB_RETRIES = 3
+
 async def test_db_connection():
     """Test database connectivity."""
-    try:
-        engine = get_engine()
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        logger.info("Database connection test successful")
-        return True
-    except Exception as e:
-        logger.error(f"Database connection test failed: {str(e)}")
-        return False
+    for attempt in range(1, MAX_DB_RETRIES + 1):
+        try:
+            engine = get_engine()
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("Database connection test successful")
+            return True
+        except OperationalError as e:
+            if attempt < MAX_DB_RETRIES:
+                wait = attempt * 2
+                logger.warning(f"DB connection attempt {attempt} failed, retrying in {wait}s")
+                time.sleep(wait)
+            else:
+                logger.error(f"Database connection failed after {MAX_DB_RETRIES} attempts")
+                return False
+        except Exception as e:
+            logger.error(f"Database connection test failed: {type(e).__name__}")
+            return False

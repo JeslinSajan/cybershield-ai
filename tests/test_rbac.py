@@ -161,7 +161,12 @@ class TestAnalystRestrictions:
         assert resp.status_code == 403
 
     def test_analyst_cannot_register_agent(self, client, analyst_token):
-        resp = client.post("/api/v1/agents/", json={}, headers=auth(analyst_token))
+        # Analysts cannot generate enrollment tokens (Admin only endpoint)
+        resp = client.post(
+            "/api/v1/agents/enrollment-token",
+            json={"agent_name": "test", "expires_in_minutes": 60},
+            headers=auth(analyst_token),
+        )
         assert resp.status_code == 403
 
     def test_analyst_can_run_scans(self, client, analyst_token):

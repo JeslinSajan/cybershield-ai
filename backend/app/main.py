@@ -66,6 +66,44 @@ async def lifespan(app: FastAPI):
         # Seeding failure is non-fatal — log the error type, not credential values
         logger.error(f"Seeding error on startup ({type(e).__name__}) — app will continue")
 
+    # Start offline detection background task
+    import asyncio as _asyncio
+
+    async def _mark_agents_offline():
+        """Background task: marks ONLINE agents OFFLINE after missed heartbeat threshold."""
+        from app.core.database import SessionLocal
+        from app.models.agent import Agent
+        from datetime import timedelta, datetime
+        import datetime as dt
+        while True:
+            await _asyncio.sleep(60)  # check every minute
+            try:
+                db = SessionLocal()
+                timeout_seconds = (
+                    settings.HEARTBEAT_INTERVAL_SECONDS
+                    * settings.AGENT_OFFLINE_MISSED_THRESHOLD
+                )
+                cutoff = dt.datetime.utcnow() - timedelta(seconds=timeout_seconds)
+                stale = db.query(Agent).filter(
+                    Agent.status == 'ONLINE',
+                    Agent.is_active == True,
+                    Agent.last_heartbeat_at < cutoff,
+                ).all()
+                for a in stale:
+                    a.status = 'OFFLINE'
+                    logger.info(f"Agent '{a.name}' marked OFFLINE (no heartbeat for {timeout_seconds}s)")
+                if stale:
+                    db.commit()
+            except Exception as e:
+                logger.error(f"Offline detection error ({type(e).__name__}) — continuing")
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    _asyncio.create_task(_mark_agents_offline())
+
     logger.info(f"{settings.APP_NAME} startup complete")
     
     yield

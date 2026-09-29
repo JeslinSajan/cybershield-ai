@@ -92,7 +92,7 @@ class TestDatabaseLayer:
         """Test that metadata contains expected number of tables."""
         # Should have 25 tables defined
         table_count = len(Base.metadata.tables)
-        assert table_count == 25, f"Expected 25 tables, got {table_count}"
+        assert table_count == 26, f"Expected 26 tables, got {table_count}"
     
     def test_expected_tables_exist(self):
         """Test that all expected tables are defined."""

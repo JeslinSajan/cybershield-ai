@@ -1,45 +1,372 @@
 """
-Agents router — Phase 8 RBAC enforcement.
+Agents router — Phase 9 full implementation.
 
-Permission matrix (user-roles.md):
-- View agents:             Administrator, Security Analyst, Viewer
-- Register / Revoke agents: Administrator only
-
-Business logic for agent management will be implemented in Phase 9.
-Agent authentication uses a SEPARATE credential mechanism (not user JWT).
-TODO Phase 9: Add Depends(get_current_agent) to agent-facing endpoints.
+Endpoints:
+  POST /agents/enrollment-token  — Admin only (JWT) — FR-4.1
+  POST /agents/register          — No auth, uses enrollment token — FR-4.2
+  POST /agents/heartbeat         — Agent credential — FR-4.3
+  GET  /agents/                  — Admin + Analyst (JWT) — FR-4.7
+  GET  /agents/{agent_id}        — Admin + Analyst (JWT) — FR-4.7
+  POST /agents/{agent_id}/revoke — Admin only (JWT) — FR-4.5
 """
 
-from typing import Annotated
-from fastapi import APIRouter, Depends
-from app.core.deps import get_any_authenticated_user, require_role
+import hashlib
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.deps import (
+    get_current_admin,
+    get_current_analyst_or_admin,
+    require_agent_credential,
+)
+from app.core.enrollment_store import add_token, consume_token
+from app.models.agent import Agent, AgentCredential, AgentHeartbeat
+from app.models.organization import Organization
+from app.models.system import AuditLog
 from app.models.user import User
 
 router = APIRouter()
 
-_any_user = Depends(get_any_authenticated_user)
-_admin_only = Depends(require_role("Administrator"))
+
+# ---------------------------------------------------------------------------
+# Pydantic schemas
+# ---------------------------------------------------------------------------
+
+class EnrollmentTokenRequest(BaseModel):
+    agent_name: str = Field(..., min_length=1, max_length=120)
+    expires_in_minutes: int = Field(default=60, ge=1, le=1440)
 
 
-@router.get("/", summary="List agents", dependencies=[_any_user])
-async def list_agents():
-    """List agents — Phase 9 implementation pending."""
-    return {"message": "Not implemented yet — Phase 9"}
+class RegisterRequest(BaseModel):
+    enrollment_token: str
+    name: str = Field(..., min_length=1, max_length=120)
+    hostname: str = Field(..., min_length=1, max_length=120)
+    version: str = Field(default="1.0.0", max_length=50)
 
 
-@router.get("/{agent_id}", summary="Get agent", dependencies=[_any_user])
-async def get_agent(agent_id: str):
-    """Get a single agent — Phase 9 implementation pending."""
-    return {"message": "Not implemented yet — Phase 9"}
+class HeartbeatRequest(BaseModel):
+    agent_id: uuid.UUID
+    timestamp: datetime
+    status: str = Field(default="ONLINE")
+    version: Optional[str] = None
+    cpu_percent: Optional[float] = None
+    memory_percent: Optional[float] = None
+    details: Optional[dict] = None
 
 
-@router.post("/", summary="Register agent (Admin only)", dependencies=[_admin_only])
-async def register_agent():
-    """Register agent — Phase 9 implementation pending. Administrator only."""
-    return {"message": "Not implemented yet — Phase 9"}
+class RevokeRequest(BaseModel):
+    pass
 
 
-@router.delete("/{agent_id}", summary="Revoke agent (Admin only)", dependencies=[_admin_only])
-async def revoke_agent(agent_id: str):
-    """Revoke agent — Phase 9 implementation pending. Administrator only."""
-    return {"message": "Not implemented yet — Phase 9"}
+# ---------------------------------------------------------------------------
+# Helper: write audit log
+# ---------------------------------------------------------------------------
+
+def _write_audit(db: Session, org_id, actor_type: str, actor_id,
+                 action: str, target_type: str, target_id, details: dict = None):
+    log = AuditLog(
+        organization_id=org_id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        details=details or {},
+    )
+    db.add(log)
+
+
+# ---------------------------------------------------------------------------
+# POST /agents/enrollment-token  (Admin JWT)
+# ---------------------------------------------------------------------------
+
+@router.post("/enrollment-token", status_code=201, summary="Generate enrollment token")
+async def generate_enrollment_token(
+    body: EnrollmentTokenRequest,
+    current_user: Annotated[User, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Generate a one-time enrollment token for a new agent. Admin only. FR-4.1."""
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=body.expires_in_minutes)
+
+    # Persist in DB — survives Render restarts and cold-start wake-ups
+    add_token(
+        db=db,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        organization_id=str(current_user.organization_id),
+        created_by_user_id=str(current_user.id),
+        agent_name_hint=body.agent_name,
+    )
+    db.commit()
+    # Never log raw_token
+    return {"token": raw_token, "expires_at": expires_at.isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# POST /agents/register  (no auth — uses enrollment token)
+# ---------------------------------------------------------------------------
+
+@router.post("/register", status_code=201, summary="Register a new agent")
+async def register_agent(
+    body: RegisterRequest,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Register a new agent using a one-time enrollment token. FR-4.2."""
+    token_hash = hashlib.sha256(body.enrollment_token.encode()).hexdigest()
+    token_data = consume_token(db=db, token_hash=token_hash)
+
+    if token_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": {"code": "AGENT_NOT_AUTHORIZED",
+                              "message": "Enrollment token is invalid or expired.",
+                              "details": []}},
+        )
+
+    org_id = uuid.UUID(token_data["organization_id"])
+
+    # Create agent row
+    agent = Agent(
+        organization_id=org_id,
+        name=body.name,
+        hostname=body.hostname,
+        version=body.version,
+        status="PENDING",
+        is_active=True,
+    )
+    db.add(agent)
+    db.flush()  # get agent.id without committing
+
+    # Generate credential
+    raw_credential = secrets.token_urlsafe(48)
+    cred_hash = hashlib.sha256(raw_credential.encode()).hexdigest()
+    credential = AgentCredential(
+        agent_id=agent.id,
+        credential_hash=cred_hash,
+        type="token",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+        is_active=True,
+    )
+    db.add(credential)
+
+    # Audit log
+    _write_audit(db, org_id, "system", None, "agent_enrolled", "agents", agent.id,
+                 {"name": agent.name, "hostname": agent.hostname})
+
+    db.commit()
+    db.refresh(agent)
+    db.refresh(credential)
+
+    # Never log raw_credential
+    return {
+        "id": str(agent.id),
+        "organization_id": str(agent.organization_id),
+        "name": agent.name,
+        "hostname": agent.hostname,
+        "status": agent.status,
+        "version": agent.version,
+        "credential": {
+            "token": raw_credential,  # returned once — never stored in plaintext
+            "expires_at": credential.expires_at.isoformat(),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /agents/heartbeat  (Agent credential)
+# ---------------------------------------------------------------------------
+
+@router.post("/heartbeat", status_code=200, summary="Agent heartbeat")
+async def agent_heartbeat(
+    body: HeartbeatRequest,
+    agent: Annotated[Agent, Depends(require_agent_credential)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Receive heartbeat from a running agent. FR-4.3."""
+    # Validate agent_id in body matches credential's agent
+    if body.agent_id != agent.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN",
+                              "message": "agent_id does not match credential.",
+                              "details": []}},
+        )
+
+    # Idempotency: skip if same (agent_id, timestamp) already exists
+    existing = db.query(AgentHeartbeat).filter(
+        AgentHeartbeat.agent_id == agent.id,
+        AgentHeartbeat.timestamp == body.timestamp,
+    ).first()
+    if existing:
+        return {"agent_id": str(agent.id), "status": agent.status,
+                "last_heartbeat_at": agent.last_heartbeat_at.isoformat() if agent.last_heartbeat_at else None}
+
+    # Save heartbeat
+    heartbeat = AgentHeartbeat(
+        agent_id=agent.id,
+        organization_id=agent.organization_id,
+        timestamp=body.timestamp,
+        status=body.status,
+        version=body.version,
+        cpu_percent=body.cpu_percent,
+        memory_percent=body.memory_percent,
+        details=body.details,
+    )
+    db.add(heartbeat)
+
+    # Update agent status
+    agent.last_heartbeat_at = body.timestamp
+    agent.status = "ONLINE"
+    if body.version:
+        agent.version = body.version
+
+    db.commit()
+
+    return {
+        "agent_id": str(agent.id),
+        "status": agent.status,
+        "last_heartbeat_at": agent.last_heartbeat_at.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /agents/  (Admin + Analyst JWT)
+# ---------------------------------------------------------------------------
+
+@router.get("/", status_code=200, summary="List agents")
+async def list_agents(
+    current_user: Annotated[User, Depends(get_current_analyst_or_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    status_filter: Optional[str] = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """List agents for the authenticated user's organization. Admin + Analyst. FR-4.7."""
+    query = db.query(Agent).filter(
+        Agent.organization_id == current_user.organization_id,
+        Agent.deleted_at == None,
+    )
+    if status_filter:
+        query = query.filter(Agent.status == status_filter)
+
+    agents = query.order_by(Agent.created_at.desc()).offset(offset).limit(limit).all()
+
+    return [
+        {
+            "id": str(a.id),
+            "name": a.name,
+            "hostname": a.hostname,
+            "status": a.status,
+            "version": a.version,
+            "is_active": a.is_active,
+            "last_heartbeat_at": a.last_heartbeat_at.isoformat() if a.last_heartbeat_at else None,
+            "created_at": a.created_at.isoformat(),
+        }
+        for a in agents
+    ]
+
+
+# ---------------------------------------------------------------------------
+# GET /agents/{agent_id}  (Admin + Analyst JWT)
+# ---------------------------------------------------------------------------
+
+@router.get("/{agent_id}", status_code=200, summary="Get agent detail")
+async def get_agent(
+    agent_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_analyst_or_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get a single agent with recent heartbeats. Admin + Analyst. FR-4.7."""
+    agent = db.query(Agent).filter(
+        Agent.id == agent_id,
+        Agent.organization_id == current_user.organization_id,
+        Agent.deleted_at == None,
+    ).first()
+
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND",
+                              "message": "Agent not found.",
+                              "details": []}},
+        )
+
+    recent_heartbeats = db.query(AgentHeartbeat).filter(
+        AgentHeartbeat.agent_id == agent.id,
+    ).order_by(AgentHeartbeat.timestamp.desc()).limit(10).all()
+
+    return {
+        "id": str(agent.id),
+        "name": agent.name,
+        "hostname": agent.hostname,
+        "status": agent.status,
+        "version": agent.version,
+        "is_active": agent.is_active,
+        "last_heartbeat_at": agent.last_heartbeat_at.isoformat() if agent.last_heartbeat_at else None,
+        "created_at": agent.created_at.isoformat(),
+        "updated_at": agent.updated_at.isoformat(),
+        "recent_heartbeats": [
+            {
+                "id": str(h.id),
+                "timestamp": h.timestamp.isoformat(),
+                "status": h.status,
+                "cpu_percent": float(h.cpu_percent) if h.cpu_percent is not None else None,
+                "memory_percent": float(h.memory_percent) if h.memory_percent is not None else None,
+                "details": h.details,
+            }
+            for h in recent_heartbeats
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /agents/{agent_id}/revoke  (Admin JWT)
+# ---------------------------------------------------------------------------
+
+@router.post("/{agent_id}/revoke", status_code=200, summary="Revoke an agent")
+async def revoke_agent(
+    agent_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Revoke an agent and deactivate all its credentials. Admin only. FR-4.5."""
+    agent = db.query(Agent).filter(
+        Agent.id == agent_id,
+        Agent.organization_id == current_user.organization_id,
+        Agent.deleted_at == None,
+    ).first()
+
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND", "message": "Agent not found.", "details": []}},
+        )
+
+    now = datetime.now(timezone.utc)
+
+    # Revoke all credentials
+    creds = db.query(AgentCredential).filter(AgentCredential.agent_id == agent.id).all()
+    for cred in creds:
+        cred.is_active = False
+        cred.revoked_at = now
+
+    # Deactivate agent
+    agent.is_active = False
+    agent.status = "OFFLINE"
+
+    _write_audit(db, agent.organization_id, "user", current_user.id,
+                 "agent_revoked", "agents", agent.id, {})
+
+    db.commit()
+
+    return {"id": str(agent.id), "is_active": False, "revoked_at": now.isoformat()}

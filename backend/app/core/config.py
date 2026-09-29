@@ -12,6 +12,11 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str
+    DATABASE_URL_DIRECT: Optional[str] = None  # for Alembic — non-pooled Neon URL
+
+    # Agent settings
+    HEARTBEAT_INTERVAL_SECONDS: int = 30
+    AGENT_OFFLINE_MISSED_THRESHOLD: int = 3  # mark OFFLINE after this many missed heartbeats
 
     # Application
     APP_NAME: str = "CyberShield AI"

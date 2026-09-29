@@ -176,3 +176,58 @@ def get_any_authenticated_user(
 ) -> User:
     """Require any authenticated human user (all three roles)."""
     return current_user
+
+
+import hashlib as _hashlib
+
+# ---------------------------------------------------------------------------
+# Agent credential authentication
+# ---------------------------------------------------------------------------
+# SHA-256 is used for agent credential hashing (NOT bcrypt).
+# Bcrypt is intentionally non-deterministic and cannot be used for token lookup.
+# SHA-256 of a secrets.token_urlsafe(48) token (384 bits entropy) is
+# collision-safe for this use case. This design decision is documented here.
+
+async def require_agent_credential(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Validate agent credential token and return the authenticated Agent.
+    
+    Raises:
+        401: if token missing, not found, expired, or credential inactive
+        403: if agent is_active = False (revoked)
+    """
+    from app.models.agent import Agent, AgentCredential
+    from datetime import datetime, timezone
+    
+    token_hash = _hashlib.sha256(credentials.credentials.encode()).hexdigest()
+    
+    now = datetime.now(timezone.utc)
+    cred = db.query(AgentCredential).filter(
+        AgentCredential.credential_hash == token_hash,
+        AgentCredential.is_active == True,
+    ).filter(
+        (AgentCredential.expires_at == None) | (AgentCredential.expires_at > now)
+    ).first()
+    
+    if cred is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": {"code": "AGENT_NOT_AUTHORIZED",
+                              "message": "Invalid or expired agent credential.",
+                              "details": []}},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    agent = db.query(Agent).filter(Agent.id == cred.agent_id).first()
+    
+    if agent is None or not agent.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "AGENT_REVOKED",
+                              "message": "This agent has been revoked.",
+                              "details": []}},
+        )
+    
+    return agent
