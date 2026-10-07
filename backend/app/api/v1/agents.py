@@ -28,6 +28,7 @@ from app.core.deps import (
 )
 from app.core.enrollment_store import add_token, consume_token
 from app.models.agent import Agent, AgentCredential, AgentHeartbeat
+from app.models.device import Device, DeviceInterface
 from app.models.organization import Organization
 from app.models.scan import Scan, ScanResult
 from app.models.system import AuditLog
@@ -276,6 +277,53 @@ async def agent_heartbeat(
     agent.status = "ONLINE"
     if body.version:
         agent.version = body.version
+
+    # Upsert device network interfaces if a linked device exists
+    if body.details and isinstance(body.details, dict):
+        network_data = body.details.get("network")
+        if isinstance(network_data, dict):
+            interfaces = network_data.get("interfaces", [])
+            if isinstance(interfaces, list) and interfaces:
+                try:
+                    linked_device = db.query(Device).filter(
+                        Device.agent_id == agent.id,
+                        Device.organization_id == agent.organization_id,
+                        Device.deleted_at == None,
+                    ).first()
+                    if linked_device:
+                        now_utc = datetime.now(timezone.utc)
+                        for iface in interfaces:
+                            if not isinstance(iface, dict):
+                                continue
+                            iface_name = iface.get("name")
+                            if not iface_name:
+                                continue
+                            existing_iface = db.query(DeviceInterface).filter(
+                                DeviceInterface.organization_id == agent.organization_id,
+                                DeviceInterface.device_id == linked_device.id,
+                                DeviceInterface.name == iface_name,
+                            ).first()
+                            if existing_iface:
+                                existing_iface.bytes_sent = int(iface.get("bytes_sent", 0))
+                                existing_iface.bytes_received = int(iface.get("bytes_received", 0))
+                                if iface.get("mac_address"):
+                                    existing_iface.mac_address = str(iface["mac_address"])
+                                if iface.get("ip_address"):
+                                    existing_iface.ip_address = str(iface["ip_address"])
+                                existing_iface.updated_at = now_utc
+                            else:
+                                new_iface = DeviceInterface(
+                                    organization_id=agent.organization_id,
+                                    device_id=linked_device.id,
+                                    name=str(iface_name),
+                                    mac_address=str(iface["mac_address"]) if iface.get("mac_address") else None,
+                                    ip_address=str(iface["ip_address"]) if iface.get("ip_address") else None,
+                                    bytes_sent=int(iface.get("bytes_sent", 0)),
+                                    bytes_received=int(iface.get("bytes_received", 0)),
+                                )
+                                db.add(new_iface)
+                except Exception:
+                    pass
 
     # Periodically mark stale agents offline (runs on each heartbeat)
     _mark_stale_agents_offline(db, exclude_agent_id=agent.id)
