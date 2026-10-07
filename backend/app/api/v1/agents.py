@@ -443,6 +443,11 @@ async def upload_result(
     scan.status = "COMPLETED"
     scan.completed_at = datetime.now(timezone.utc)
     
+    # Process discovery results to populate devices inventory
+    if body.result_type == "discovery":
+        from app.services.discovery_service import process_discovery_result
+        process_discovery_result(db, result, agent)
+        
     db.commit()
     db.refresh(result)
     
