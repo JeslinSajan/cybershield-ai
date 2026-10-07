@@ -676,14 +676,17 @@ async def get_network_stats(
     current_user: Annotated[User, Depends(get_current_analyst_or_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Get agent network stats. Analyst+Admin."""
+    """Get agent network stats. Analyst+Admin. FR-4.7."""
     agent = db.query(Agent).filter(
         Agent.id == agent_id,
         Agent.organization_id == current_user.organization_id,
         Agent.deleted_at == None
     ).first()
     if not agent:
-        raise HTTPException(status_code=403, detail={"error": {"code": "FORBIDDEN", "message": "Agent not found or access denied.", "details": []}})
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND", "message": "Agent not found.", "details": []}},
+        )
         
     heartbeats = db.query(AgentHeartbeat).filter(AgentHeartbeat.agent_id == agent.id).order_by(AgentHeartbeat.timestamp.desc()).limit(10).all()
     

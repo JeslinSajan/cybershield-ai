@@ -345,3 +345,192 @@ class TestBackendDeviceInterfaceUpsert:
         ).count()
         assert count == 0
 
+
+from app.models.user import User
+from app.models.organization import Role
+from app.core.security import create_access_token, hash_password
+
+
+def _user_token(user, db_session):
+    role = db_session.query(Role).filter(Role.id == user.role_id).first()
+    return create_access_token(
+        subject=str(user.id),
+        role_name=role.name,
+        organization_id=str(user.organization_id),
+    )
+
+
+@pytest.fixture
+def network_stats_setup(db_session):
+    """Setup orgs, users with different roles, and agents for network-stats testing."""
+    uid1 = uuid.uuid4().hex[:8]
+    org1 = Organization(name=f"OrgStats1-{uid1}", slug=f"org-stats1-{uid1}")
+    uid2 = uuid.uuid4().hex[:8]
+    org2 = Organization(name=f"OrgStats2-{uid2}", slug=f"org-stats2-{uid2}")
+    db_session.add_all([org1, org2])
+    db_session.flush()
+
+    roles = {}
+    for r_name, r_desc in [("Administrator", "Admin"), ("Security Analyst", "Analyst"), ("Viewer", "Viewer")]:
+        r = db_session.query(Role).filter(Role.name == r_name).first()
+        if not r:
+            r = Role(name=r_name, description=r_desc)
+            db_session.add(r)
+            db_session.flush()
+        roles[r_name] = r
+
+    admin_org1 = User(
+        organization_id=org1.id,
+        role_id=roles["Administrator"].id,
+        email=f"admin_{uid1}@test.com",
+        password_hash=hash_password("Pass123!"),
+        username=f"admin-{uid1}",
+        is_active=True,
+    )
+    analyst_org1 = User(
+        organization_id=org1.id,
+        role_id=roles["Security Analyst"].id,
+        email=f"analyst_{uid1}@test.com",
+        password_hash=hash_password("Pass123!"),
+        username=f"analyst-{uid1}",
+        is_active=True,
+    )
+    viewer_org1 = User(
+        organization_id=org1.id,
+        role_id=roles["Viewer"].id,
+        email=f"viewer_{uid1}@test.com",
+        password_hash=hash_password("Pass123!"),
+        username=f"viewer-{uid1}",
+        is_active=True,
+    )
+    admin_org2 = User(
+        organization_id=org2.id,
+        role_id=roles["Administrator"].id,
+        email=f"admin_{uid2}@test.com",
+        password_hash=hash_password("Pass123!"),
+        username=f"admin-{uid2}",
+        is_active=True,
+    )
+    db_session.add_all([admin_org1, analyst_org1, viewer_org1, admin_org2])
+    db_session.flush()
+
+    # Agent in org1
+    agent_org1 = Agent(
+        organization_id=org1.id,
+        name=f"agent-{uid1}",
+        hostname=f"host-{uid1}",
+        status="ONLINE",
+        is_active=True,
+    )
+    db_session.add(agent_org1)
+    db_session.flush()
+
+    # Heartbeat for agent_org1
+    hb = AgentHeartbeat(
+        agent_id=agent_org1.id,
+        organization_id=org1.id,
+        timestamp=datetime.now(timezone.utc),
+        status="ONLINE",
+        cpu_percent=25.0,
+        memory_percent=45.0,
+        details={
+            "network": {
+                "interfaces": [
+                    {"name": "eth0", "bytes_sent": 1000, "bytes_received": 2000}
+                ],
+                "active_connections": 5,
+            }
+        },
+    )
+    db_session.add(hb)
+    db_session.commit()
+
+    return {
+        "org1": org1,
+        "org2": org2,
+        "admin_org1": admin_org1,
+        "analyst_org1": analyst_org1,
+        "viewer_org1": viewer_org1,
+        "admin_org2": admin_org2,
+        "agent_org1": agent_org1,
+    }
+
+
+class TestNetworkStatsEndpointRBAC:
+    def test_admin_can_get_network_stats(self, network_stats_setup, db_session):
+        """Administrator can retrieve agent network stats."""
+        setup = network_stats_setup
+        token = _user_token(setup["admin_org1"], db_session)
+        agent_id = str(setup["agent_org1"].id)
+
+        resp = client.get(
+            f"/api/v1/agents/{agent_id}/network-stats",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert "details" in data[0]
+        assert "network" in data[0]["details"]
+
+    def test_analyst_can_get_network_stats(self, network_stats_setup, db_session):
+        """Security Analyst can retrieve agent network stats."""
+        setup = network_stats_setup
+        token = _user_token(setup["analyst_org1"], db_session)
+        agent_id = str(setup["agent_org1"].id)
+
+        resp = client.get(
+            f"/api/v1/agents/{agent_id}/network-stats",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) == 1
+
+    def test_viewer_cannot_get_network_stats(self, network_stats_setup, db_session):
+        """Viewer role is forbidden from retrieving network stats."""
+        setup = network_stats_setup
+        token = _user_token(setup["viewer_org1"], db_session)
+        agent_id = str(setup["agent_org1"].id)
+
+        resp = client.get(
+            f"/api/v1/agents/{agent_id}/network-stats",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 403
+        data = resp.json()
+        assert "error" in data
+        assert data["error"]["code"] == "FORBIDDEN"
+
+    def test_nonexistent_agent_returns_404(self, network_stats_setup, db_session):
+        """Request for nonexistent agent returns 404 with standard NOT_FOUND error envelope."""
+        setup = network_stats_setup
+        token = _user_token(setup["admin_org1"], db_session)
+        fake_id = str(uuid.uuid4())
+
+        resp = client.get(
+            f"/api/v1/agents/{fake_id}/network-stats",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
+        data = resp.json()
+        assert "error" in data
+        assert data["error"]["code"] == "NOT_FOUND"
+
+    def test_cross_organization_agent_access_prevented(self, network_stats_setup, db_session):
+        """User from Org 2 cannot retrieve network stats for an agent belonging to Org 1."""
+        setup = network_stats_setup
+        token = _user_token(setup["admin_org2"], db_session)
+        agent_id = str(setup["agent_org1"].id)
+
+        resp = client.get(
+            f"/api/v1/agents/{agent_id}/network-stats",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404
+        data = resp.json()
+        assert "error" in data
+        assert data["error"]["code"] == "NOT_FOUND"
+
