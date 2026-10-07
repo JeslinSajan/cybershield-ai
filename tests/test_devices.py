@@ -159,3 +159,115 @@ class TestDeviceEndpoints:
         # Direct GET of Org 2's device by Org 1 returns 404
         detail_resp = client.get(f"/api/v1/devices/{dev_org2_id}", headers={"Authorization": f"Bearer {token_org1}"})
         assert detail_resp.status_code == 404
+
+
+class TestDeviceDiscoveryIntegration:
+    def test_full_device_discovery_loop(self, device_test_setup, db_session):
+        """End-to-end loop: Scan creation → Agent poll → Result upload → Device query."""
+        import secrets, hashlib
+        from app.models.agent import Agent, AgentCredential
+        from app.models.scan import Scan
+
+        org = device_test_setup["org1"]
+        admin = device_test_setup["user_org2"]  # Admin user
+        # Give admin access to org1 or use an admin in org1
+        from app.models.organization import Role
+        admin_role = db_session.query(Role).filter(Role.name == "Administrator").first()
+        admin_org1 = User(
+            organization_id=org.id,
+            role_id=admin_role.id,
+            email="admin_org1_loop@test.com",
+            password_hash=hash_password("Pass123!"),
+            username="admin-org1-loop",
+            is_active=True,
+        )
+        db_session.add(admin_org1)
+        db_session.flush()
+
+        # Create Agent in org1
+        agent = Agent(
+            organization_id=org.id,
+            name="loop-agent",
+            hostname="loop-host",
+            status="ONLINE",
+            is_active=True,
+        )
+        db_session.add(agent)
+        db_session.flush()
+
+        raw_token = secrets.token_urlsafe(48)
+        cred_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        from datetime import timedelta
+        cred = AgentCredential(
+            agent_id=agent.id,
+            credential_hash=cred_hash,
+            type="token",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+            is_active=True,
+        )
+        db_session.add(cred)
+        db_session.commit()
+
+        # Step 1: Admin creates discovery scan
+        admin_token = _token(admin_org1)
+        scan_resp = client.post(
+            "/api/v1/scans/",
+            json={
+                "agent_id": str(agent.id),
+                "scan_type": "discovery",
+                "target_scope": "172.16.0.0/24",
+            },
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert scan_resp.status_code == 201
+        scan_id = scan_resp.json()["id"]
+
+        # Step 2: Agent polls pending tasks
+        poll_resp = client.get("/api/v1/agents/tasks", headers={"Authorization": f"Bearer {raw_token}"})
+        assert poll_resp.status_code == 200
+        tasks = poll_resp.json()
+        assert any(t["id"] == scan_id for t in tasks)
+
+        # Step 3: Agent uploads discovery results
+        discovered_hosts = [
+            {
+                "ip_address": "172.16.0.10",
+                "mac_address": "11:22:33:44:55:66",
+                "hostname": "printer-e2e.local",
+                "vendor": "HP",
+                "status": "online",
+            },
+            {
+                "ip_address": "172.16.0.20",
+                "mac_address": "11:22:33:44:55:77",
+                "hostname": "nas-e2e.local",
+                "vendor": "Synology",
+                "status": "online",
+            },
+        ]
+        result_resp = client.post(
+            "/api/v1/agents/results",
+            json={
+                "scan_id": scan_id,
+                "device_id": None,
+                "upload_id": str(uuid.uuid4()),
+                "result_type": "discovery",
+                "raw_payload": {"hosts": discovered_hosts},
+            },
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        assert result_resp.status_code == 201
+
+        # Step 4: Verify scan is COMPLETED
+        scan_detail = client.get(f"/api/v1/scans/{scan_id}", headers={"Authorization": f"Bearer {admin_token}"})
+        assert scan_detail.status_code == 200
+        assert scan_detail.json()["status"] == "COMPLETED"
+
+        # Step 5: Viewer queries devices and sees the new devices
+        viewer_token = _token(device_test_setup["user_org1"])
+        devices_resp = client.get("/api/v1/devices/", headers={"Authorization": f"Bearer {viewer_token}"})
+        assert devices_resp.status_code == 200
+        discovered_ips = [d["ip_address"] for d in devices_resp.json()]
+        assert "172.16.0.10" in discovered_ips
+        assert "172.16.0.20" in discovered_ips
+

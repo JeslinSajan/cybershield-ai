@@ -222,9 +222,33 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 11 — Device Discovery — ⬜ Not Started
+## Phase 11 — Device Discovery — COMPLETED 2026-10-07
 
-*Append after Phase 11.*
+### Database & Schema Verification:
+- `devices` table: id (UUID PK), organization_id (UUID FK), ip_address (String), mac_address (String nullable), hostname (String nullable), vendor (String nullable), os (String nullable), status (String default 'online'), first_seen (DateTime), last_seen (DateTime), created_at, updated_at.
+- `device_interfaces` table: id (UUID PK), organization_id (UUID FK), device_id (UUID FK), interface_name (String), ip_address (String nullable), mac_address (String nullable), is_primary (Boolean default False), created_at, updated_at.
+- Verified existing tables from Alembic migration `001_initial_schema.py`. No new migrations required.
+
+### Endpoints Created / Implemented:
+- `POST /api/v1/scans/` (Analyst+Admin JWT): creates scan task with `scan_type="discovery"`, records `AuditLog` action `scan_created`.
+- `GET /api/v1/scans/` (Admin+Analyst JWT): lists scans for organization with limit/offset.
+- `GET /api/v1/scans/{scan_id}` (Admin+Analyst JWT): retrieves scan detail by ID.
+- `GET /api/v1/devices/` (All 3 roles JWT): lists discovered devices for organization with status filter and pagination.
+- `GET /api/v1/devices/{device_id}` (All 3 roles JWT): retrieves single device with 404 error envelope.
+- Reused Phase 10 agent polling (`GET /api/v1/agents/tasks`) and result upload (`POST /api/v1/agents/results`).
+
+### Services & Agent Modules:
+- `backend/app/services/discovery_service.py`: `process_discovery_result(db, scan, payload)` parses host entries, upserts `Device` records by `(organization_id, ip_address)` to prevent duplicates, updates `first_seen`/`last_seen`, and records `AuditLog`.
+- `agent/collectors/network_scanner.py`: `discover_devices(subnet)` executes `nmap -sn` ping sweeps with automatic fallback to ARP table parsing (`arp -a`) and local network interface inspection when Nmap CLI is not installed.
+- `agent/task_poller.py`: integrated `handle_discovery()` task dispatcher to run device discovery and upload results via `POST /api/v1/agents/results`.
+
+### Test Evidence:
+- New tests:
+  - `tests/test_scans.py` (5 passed)
+  - `tests/test_network_scanner.py` (4 passed)
+  - `tests/test_discovery_service.py` (2 passed)
+  - `tests/test_devices.py` (6 passed including end-to-end integration loop)
+- Test suite total: 110 passed, 2 pre-existing failures from Phase 8. Zero regressions.
 
 ---
 
