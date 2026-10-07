@@ -29,10 +29,43 @@ from app.core.deps import (
 from app.core.enrollment_store import add_token, consume_token
 from app.models.agent import Agent, AgentCredential, AgentHeartbeat
 from app.models.organization import Organization
+from app.models.scan import Scan, ScanResult
 from app.models.system import AuditLog
 from app.models.user import User
 
 router = APIRouter()
+
+# Offline detection threshold: mark agents offline if no heartbeat for 120 seconds
+OFFLINE_THRESHOLD_SECONDS = 120
+
+
+def _mark_stale_agents_offline(db: Session, exclude_agent_id: Optional[uuid.UUID] = None) -> int:
+    """Mark agents as OFFLINE if they haven't sent a heartbeat recently.
+    
+    Returns the number of agents marked offline.
+    """
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=OFFLINE_THRESHOLD_SECONDS)
+    
+    # Find agents that are ONLINE but have stale heartbeats
+    query = db.query(Agent).filter(
+        Agent.status == "ONLINE",
+        Agent.is_active == True,
+        (Agent.last_heartbeat_at < threshold) | (Agent.last_heartbeat_at.is_(None))
+    )
+    if exclude_agent_id:
+        query = query.filter(Agent.id != exclude_agent_id)
+        
+    stale_agents = query.all()
+    
+    count = 0
+    for stale_agent in stale_agents:
+        stale_agent.status = "OFFLINE"
+        count += 1
+    
+    if count > 0:
+        db.commit()
+    
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +96,20 @@ class HeartbeatRequest(BaseModel):
 
 class RevokeRequest(BaseModel):
     pass
+
+
+class TaskStatusUpdate(BaseModel):
+    status: str
+    started_at: Optional[datetime] = None
+    details: Optional[dict] = None
+
+
+class ResultUpload(BaseModel):
+    scan_id: uuid.UUID
+    device_id: Optional[uuid.UUID] = None
+    upload_id: Optional[str] = Field(None, max_length=36)
+    result_type: str
+    raw_payload: dict
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +277,9 @@ async def agent_heartbeat(
     if body.version:
         agent.version = body.version
 
+    # Periodically mark stale agents offline (runs on each heartbeat)
+    _mark_stale_agents_offline(db, exclude_agent_id=agent.id)
+
     db.commit()
 
     return {
@@ -275,6 +325,144 @@ async def list_agents(
         for a in agents
     ]
 
+
+# ---------------------------------------------------------------------------
+# GET /agents/tasks  (Agent credential)
+# ---------------------------------------------------------------------------
+
+@router.get("/tasks", status_code=200, summary="Get pending tasks")
+async def get_tasks(
+    agent: Annotated[Agent, Depends(require_agent_credential)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get pending tasks for the agent. FR-5.1."""
+    tasks = db.query(Scan).filter(
+        Scan.agent_id == agent.id,
+        Scan.status == "PENDING",
+        Scan.organization_id == agent.organization_id,
+    ).all()
+    
+    return [
+        {
+            "id": str(t.id),
+            "organization_id": str(t.organization_id),
+            "agent_id": str(t.agent_id),
+            "scan_type": t.scan_type,
+            "status": t.status,
+            "target_scope": t.target_scope,
+            "created_at": t.created_at.isoformat(),
+        }
+        for t in tasks
+    ]
+
+
+# ---------------------------------------------------------------------------
+# POST /agents/tasks/{task_id}/status  (Agent credential)
+# ---------------------------------------------------------------------------
+
+@router.post("/tasks/{task_id}/status", status_code=200, summary="Update task status")
+async def update_task_status(
+    task_id: uuid.UUID,
+    body: TaskStatusUpdate,
+    agent: Annotated[Agent, Depends(require_agent_credential)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Update task status. FR-5.2."""
+    scan = db.query(Scan).filter(Scan.id == task_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail={"error": {"code": "NOT_FOUND", "message": "Task not found.", "details": []}})
+    if scan.agent_id != agent.id:
+        raise HTTPException(status_code=403, detail={"error": {"code": "FORBIDDEN", "message": "Task does not belong to agent.", "details": []}})
+        
+    scan.status = body.status
+    if body.status == "RUNNING":
+        scan.started_at = body.started_at or datetime.now(timezone.utc)
+    elif body.status in ("COMPLETED", "FAILED"):
+        scan.completed_at = datetime.now(timezone.utc)
+        
+    db.commit()
+    db.refresh(scan)
+    
+    return {
+        "id": str(scan.id),
+        "status": scan.status,
+        "updated_at": scan.updated_at.isoformat()
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /agents/results  (Agent credential)
+# ---------------------------------------------------------------------------
+
+@router.post("/results", status_code=201, summary="Upload scan result")
+async def upload_result(
+    body: ResultUpload,
+    agent: Annotated[Agent, Depends(require_agent_credential)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Upload result for a task. FR-5.3."""
+    scan = db.query(Scan).filter(Scan.id == body.scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail={"error": {"code": "NOT_FOUND", "message": "Task not found.", "details": []}})
+    if scan.agent_id != agent.id:
+        raise HTTPException(status_code=403, detail={"error": {"code": "FORBIDDEN", "message": "Task does not belong to agent.", "details": []}})
+    
+    # Idempotency check: if upload_id provided, check if already exists
+    # This must happen BEFORE task state validation to allow retries of completed uploads
+    if body.upload_id:
+        existing = db.query(ScanResult).filter(ScanResult.upload_id == body.upload_id).first()
+        if existing:
+            # Return existing result without re-inserting
+            return {
+                "id": str(existing.id),
+                "scan_id": str(existing.scan_id),
+                "device_id": str(existing.device_id) if existing.device_id else None,
+                "result_type": existing.result_type,
+                "created_at": existing.created_at.isoformat(),
+                "upload_id": existing.upload_id
+            }
+    
+    # Validate task state - only accept results for RUNNING or PENDING tasks
+    if scan.status not in ("PENDING", "RUNNING"):
+        raise HTTPException(
+            status_code=409,
+            detail={"error": {"code": "INVALID_TASK_STATE", "message": f"Task is {scan.status}, cannot accept results.", "details": []}}
+        )
+    
+    result = ScanResult(
+        organization_id=agent.organization_id,
+        scan_id=body.scan_id,
+        device_id=body.device_id,
+        upload_id=body.upload_id,
+        result_type=body.result_type,
+        raw_payload=body.raw_payload
+    )
+    db.add(result)
+    
+    # Update task state to COMPLETED after successful result upload
+    scan.status = "COMPLETED"
+    scan.completed_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(result)
+    
+    return {
+        "id": str(result.id),
+        "scan_id": str(result.scan_id),
+        "device_id": str(result.device_id) if result.device_id else None,
+        "result_type": result.result_type,
+        "created_at": result.created_at.isoformat(),
+        "upload_id": result.upload_id
+    }
+
+
+# ---------------------------------------------------------------------------
+# Dynamic agent-ID routes
+#
+# Keep these after static Agent routes. FastAPI matches routes in declaration
+# order, so declaring /{agent_id} above /tasks would interpret "tasks" as an
+# agent ID instead of dispatching to the Agent task-list endpoint.
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # GET /agents/{agent_id}  (Admin + Analyst JWT)
@@ -370,3 +558,89 @@ async def revoke_agent(
     db.commit()
 
     return {"id": str(agent.id), "is_active": False, "revoked_at": now.isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# POST /agents/{agent_id}/rotate-credential  (Admin JWT)
+# ---------------------------------------------------------------------------
+
+@router.post("/{agent_id}/rotate-credential", status_code=200, summary="Rotate agent credential")
+async def rotate_credential(
+    agent_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Rotate agent credentials. Admin only."""
+    agent = db.query(Agent).filter(
+        Agent.id == agent_id,
+        Agent.organization_id == current_user.organization_id,
+        Agent.deleted_at == None
+    ).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail={"error": {"code": "NOT_FOUND", "message": "Agent not found.", "details": []}})
+        
+    now = datetime.now(timezone.utc)
+    
+    # Revoke all credentials
+    creds = db.query(AgentCredential).filter(AgentCredential.agent_id == agent.id, AgentCredential.is_active == True).all()
+    for cred in creds:
+        cred.is_active = False
+        cred.revoked_at = now
+        
+    # Generate new credential
+    raw_credential = secrets.token_urlsafe(48)
+    cred_hash = hashlib.sha256(raw_credential.encode()).hexdigest()
+    new_cred = AgentCredential(
+        agent_id=agent.id,
+        credential_hash=cred_hash,
+        type="token",
+        expires_at=now + timedelta(days=365),
+        is_active=True,
+    )
+    db.add(new_cred)
+    
+    _write_audit(db, agent.organization_id, "user", current_user.id,
+                 "agent_credential_rotated", "agents", agent.id, {})
+                 
+    db.commit()
+    db.refresh(new_cred)
+    
+    return {
+        "agent_id": str(agent.id),
+        "credential_id": str(new_cred.id),
+        "expires_at": new_cred.expires_at.isoformat(),
+        "is_active": True
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /agents/{agent_id}/network-stats  (Analyst+Admin JWT)
+# ---------------------------------------------------------------------------
+
+@router.get("/{agent_id}/network-stats", status_code=200, summary="Get agent network stats")
+async def get_network_stats(
+    agent_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_analyst_or_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Get agent network stats. Analyst+Admin."""
+    agent = db.query(Agent).filter(
+        Agent.id == agent_id,
+        Agent.organization_id == current_user.organization_id,
+        Agent.deleted_at == None
+    ).first()
+    if not agent:
+        raise HTTPException(status_code=403, detail={"error": {"code": "FORBIDDEN", "message": "Agent not found or access denied.", "details": []}})
+        
+    heartbeats = db.query(AgentHeartbeat).filter(AgentHeartbeat.agent_id == agent.id).order_by(AgentHeartbeat.timestamp.desc()).limit(10).all()
+    
+    return [
+        {
+            "id": str(h.id),
+            "timestamp": h.timestamp.isoformat(),
+            "cpu_percent": float(h.cpu_percent) if h.cpu_percent is not None else None,
+            "memory_percent": float(h.memory_percent) if h.memory_percent is not None else None,
+            "details": h.details
+        }
+        for h in heartbeats
+    ]

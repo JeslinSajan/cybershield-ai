@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# FastAPI/Starlette TestClient dependency. Pinned for compatibility with the
+# backend's FastAPI 0.104.1 / Starlette 0.27.0 dependency set.
+httpx==0.27.2
+pytest==9.1.1

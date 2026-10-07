@@ -16,6 +16,8 @@ from agent.api_client import APIClient
 from agent.enrollment import enroll
 from agent.heartbeat import send_heartbeat
 from agent.identity import load_identity, save_identity
+from agent.offline_queue import OfflineQueue
+from agent.task_poller import poll_tasks, handle_task
 
 # Configure logging
 logging.basicConfig(
@@ -45,15 +47,48 @@ def main():
     # Create authenticated API client
     api_client = APIClient(credential_token=identity["credential_token"])
 
-    logger.info(f"Starting heartbeat loop (interval: {config.HEARTBEAT_INTERVAL}s)")
+    # Initialize offline queue
+    offline_queue = OfflineQueue(queue_dir=".")
+    logger.info(f"Offline queue initialized with {len(offline_queue)} items")
+
+    logger.info(f"Starting loop (heartbeat: {config.HEARTBEAT_INTERVAL}s, tasks: {config.TASK_POLL_INTERVAL}s)")
+    
+    last_heartbeat = 0
+    last_task_poll = 0
+    last_queue_drain = 0
+    QUEUE_DRAIN_INTERVAL = 60  # Try to drain queue every 60 seconds
+    
     while True:
-        success = send_heartbeat(api_client, identity["agent_id"])
-
-        if not api_client._credential_valid:
-            logger.error("Credential rejected — contact admin to revoke and re-enroll.")
-            sys.exit(1)
-
-        time.sleep(config.HEARTBEAT_INTERVAL)
+        now = time.time()
+        
+        # Heartbeat
+        if now - last_heartbeat >= config.HEARTBEAT_INTERVAL:
+            send_heartbeat(api_client, identity["agent_id"])
+            if not api_client._credential_valid:
+                logger.error("Credential rejected — contact admin to revoke and re-enroll.")
+                sys.exit(1)
+            last_heartbeat = time.time()
+            
+        # Queue drain - attempt to send queued results
+        if now - last_queue_drain >= QUEUE_DRAIN_INTERVAL:
+            if not offline_queue.is_empty:
+                logger.info("Attempting to drain offline queue...")
+                drained = offline_queue.drain(api_client)
+                if drained > 0:
+                    logger.info(f"Drained {drained} items from queue")
+            last_queue_drain = time.time()
+            
+        # Tasks
+        if now - last_task_poll >= config.TASK_POLL_INTERVAL:
+            tasks = poll_tasks(api_client)
+            for task in tasks:
+                handle_task(task, api_client, offline_queue)
+            if not api_client._credential_valid:
+                logger.error("Credential rejected — contact admin to revoke and re-enroll.")
+                sys.exit(1)
+            last_task_poll = time.time()
+            
+        time.sleep(1)
 
 
 if __name__ == "__main__":

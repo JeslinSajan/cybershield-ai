@@ -28,9 +28,8 @@ This contract covers the scan lifecycle initiated by a human user and coordinate
 ```json
 {
   "agent_id": "uuid",
-  "scan_type": "discovery",
-  "target_scope": "192.168.1.0/24",
-  "notes": "Authorized internal subnet assessment"
+  "scan_type": "health_check",
+  "target_scope": "local"
 }
 ```
 
@@ -42,9 +41,9 @@ This contract covers the scan lifecycle initiated by a human user and coordinate
   "organization_id": "uuid",
   "agent_id": "uuid",
   "created_by_user_id": "uuid",
-  "scan_type": "discovery",
+  "scan_type": "health_check",
   "status": "PENDING",
-  "target_scope": "192.168.1.0/24",
+  "target_scope": "local",
   "started_at": null,
   "completed_at": null,
   "created_at": "2026-08-24T12:00:00Z",
@@ -54,7 +53,7 @@ This contract covers the scan lifecycle initiated by a human user and coordinate
 
 - Success status: `201 Created`
 - Error statuses: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
-- Notes: Before execution, the backend must validate the target is authorized and an online Agent is available. This is the user-visible start-scan action described in FR-5.1.
+- Notes: Phase 10 supports `health_check` only. The target must be an active, online Agent in the caller's organization. The task is stored as `PENDING` and is returned only to that Agent through `GET /agents/tasks`. Discovery and other scan types are introduced in later phases.
 
 ### GET /scans
 

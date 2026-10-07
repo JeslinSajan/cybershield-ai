@@ -20,11 +20,45 @@ def collect_metrics() -> dict:
         except Exception:
             disk = 0
 
+    # Collect network interface information
+    interfaces = {}
+    try:
+        net_io = psutil.net_io_counters(pernic=True)
+        net_addrs = psutil.net_if_addrs()
+        for iface_name, addrs in net_addrs.items():
+            iface_data = {
+                "name": iface_name,
+                "status": "up" if iface_name in net_io else "unknown",
+                "addresses": []
+            }
+            
+            for addr in addrs:
+                addr_info = {
+                    "family": str(addr.family),
+                    "address": addr.address,
+                    "netmask": addr.netmask,
+                    "broadcast": addr.broadcast
+                }
+                iface_data["addresses"].append(addr_info)
+            
+            # Add I/O stats if available
+            if iface_name in net_io:
+                io = net_io[iface_name]
+                iface_data["bytes_sent"] = io.bytes_sent
+                iface_data["bytes_recv"] = io.bytes_recv
+                iface_data["packets_sent"] = io.packets_sent
+                iface_data["packets_recv"] = io.packets_recv
+            
+            interfaces[iface_name] = iface_data
+    except Exception as e:
+        logger.warning(f"Failed to collect network metrics: {e}")
+
     return {
         "cpu_percent": psutil.cpu_percent(interval=0.5),
         "memory_percent": psutil.virtual_memory().percent,
         "details": {
             "disk_usage_percent": disk,
+            "interfaces": interfaces,
         },
     }
 

@@ -98,6 +98,11 @@ FR support: FR-5.2, FR-6.1, FR-6.2.
 
 Roles: Administrator and Security Analyst can review; Viewers can read.
 
+Schema notes:
+- Includes `upload_id` (VARCHAR(36), nullable, unique, indexed) for idempotent result uploads.
+- When an agent provides an `upload_id`, the backend checks for existing results with the same ID before creating a new record, enabling safe retry of uploads without duplicates.
+- The uniqueness constraint on `upload_id` prevents duplicate result records at the database level.
+
 ## 13. cves
 
 Purpose: local or cached CVE reference data for vulnerability matching.

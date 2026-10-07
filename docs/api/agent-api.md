@@ -113,14 +113,31 @@ Rules below.
 ```json
 {
   "agent_id": "uuid",
-  "timestamp": "2026-08-24T12:30:00Z",
+  "timestamp": "2026-08-24T12:45:00Z",
   "status": "ONLINE",
   "version": "1.0.0",
-  "cpu_percent": 36.4,
-  "memory_percent": 58.1,
+  "cpu_percent": 25.5,
+  "memory_percent": 60.2,
   "details": {
-    "disk_usage_percent": 43,
-    "network_status": "ok"
+    "disk_usage_percent": 45.0,
+    "interfaces": {
+      "eth0": {
+        "name": "eth0",
+        "status": "up",
+        "addresses": [
+          {
+            "family": "AddressFamily.AF_INET",
+            "address": "192.168.1.100",
+            "netmask": "255.255.255.0",
+            "broadcast": "192.168.1.255"
+          }
+        ],
+        "bytes_sent": 1234567,
+        "bytes_recv": 9876543,
+        "packets_sent": 10000,
+        "packets_recv": 8000
+      }
+    }
   }
 }
 ```
@@ -131,14 +148,18 @@ Rules below.
 {
   "agent_id": "uuid",
   "status": "ONLINE",
-  "last_heartbeat_at": "2026-08-24T12:30:00Z",
-  "updated": true
+  "last_heartbeat_at": "2026-08-24T12:45:00Z"
 }
 ```
 
 - Success status: `200 OK`
-- Error statuses: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
-- Notes: This maps to `agent_heartbeats` plus `agents.last_heartbeat_at` and supports FR-4.3 and FR-4.4.
+- Error statuses: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`
+- Notes:
+  - Heartbeat is idempotent: duplicate (agent_id, timestamp) pairs are silently ignored.
+  - Updates agent.status to ONLINE and agent.last_heartbeat_at.
+  - Includes network interface metrics (name, status, addresses, bytes sent/received, packets sent/received).
+  - Triggers offline detection: agents with no heartbeat for 120+ seconds are marked OFFLINE.
+  - Offline detection runs on each heartbeat to avoid background service complexity.
 
 ### GET /agents/tasks
 
@@ -205,6 +226,7 @@ Rules below.
 {
   "scan_id": "uuid",
   "device_id": "uuid",
+  "upload_id": "uuid",
   "result_type": "ports",
   "raw_payload": {
     "ports": [22, 80, 443],
@@ -223,14 +245,21 @@ Rules below.
   "id": "uuid",
   "scan_id": "uuid",
   "device_id": "uuid",
+  "upload_id": "uuid",
   "result_type": "ports",
   "created_at": "2026-08-24T12:45:00Z"
 }
 ```
 
 - Success status: `201 Created`
-- Error statuses: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
-- Notes: This is the Agent upload path for authorized discovery or vulnerability evidence. The backend then normalizes it into `scan_results` and downstream tables.
+- Error statuses: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`
+- Notes:
+  - This is the Agent upload path for authorized discovery or vulnerability evidence. The backend then normalizes it into `scan_results` and downstream tables.
+  - `upload_id` is optional. If provided, it enables idempotent uploads: if a result with the same `upload_id` already exists, the endpoint returns the existing result without creating a duplicate.
+  - The endpoint validates that the authenticated agent owns the task (scan.agent_id == agent.id).
+  - The endpoint validates task state before accepting results: only PENDING or RUNNING tasks are accepted. COMPLETED or FAILED tasks return 409 Conflict.
+  - After a successful result upload, the task status is automatically updated to COMPLETED and completed_at is set.
+  - Idempotency check happens before task state validation to allow retry of uploads even after the task is marked COMPLETED.
 
 ### POST /agents/{agent_id}/revoke
 
