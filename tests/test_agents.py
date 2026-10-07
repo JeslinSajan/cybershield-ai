@@ -484,7 +484,7 @@ class TestTaskCreation:
 
         response = client.post(
             "/api/v1/scans/",
-            json={"agent_id": str(agent.id), "scan_type": "discovery", "target_scope": "local"},
+            json={"agent_id": str(agent.id), "scan_type": "unsupported_scan_type", "target_scope": "local"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
