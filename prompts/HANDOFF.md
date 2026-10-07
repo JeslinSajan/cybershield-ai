@@ -252,9 +252,41 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 12 — Network Monitoring — ⬜ Not Started
+## Phase 12 — Network Monitoring — COMPLETED 2026-10-08
 
-*Append after Phase 12.*
+### Database & Schema Verification:
+- `device_interfaces` table: id (UUID PK), organization_id (UUID FK), device_id (UUID FK), name (String), mac_address (String nullable), ip_address (INET nullable), bytes_sent (BigInteger), bytes_received (BigInteger), created_at, updated_at.
+- `agent_heartbeats` table: `details` (JSONB) stores nested network statistics under `"network"`.
+
+### Payload Shape:
+- Heartbeat network payload in `details["network"]`:
+  ```json
+  {
+    "interfaces": [
+      {
+        "name": "eth0",
+        "is_up": true,
+        "bytes_sent": 100000,
+        "bytes_received": 250000,
+        "speed_mbps": 1000,
+        "mac_address": "00:aa:bb:cc:dd:ee",
+        "ip_address": "192.168.10.15"
+      }
+    ],
+    "active_connections": 12
+  }
+  ```
+
+### Endpoints Created / Extended:
+- `POST /api/v1/agents/heartbeat` (Agent Credential auth): extends heartbeat processing to inspect `details["network"]["interfaces"]` and upsert `DeviceInterface` records (`bytes_sent`, `bytes_received`, `mac_address`, `ip_address`, `updated_at`) when a linked device exists. Gracefully skips when no device is linked.
+- `GET /api/v1/agents/{agent_id}/network-stats` (Analyst+Admin JWT): returns up to 10 recent heartbeat snapshots with network details. Rejects Viewers with 403 FORBIDDEN and non-existent/cross-tenant agents with 404 NOT_FOUND error envelope.
+
+### Agent Modules:
+- `agent/heartbeat.py`: implemented `collect_network_stats()` using `psutil.net_io_counters()`, `psutil.net_if_stats()`, `psutil.net_if_addrs()`, and `psutil.net_connections()`. Handles permissions safely.
+
+### Test Evidence:
+- `tests/test_network_monitoring.py` (14 passed)
+- Full test suite: 124 passed, 2 pre-existing failures from Phase 8. Zero regressions.
 
 ---
 

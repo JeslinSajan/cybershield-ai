@@ -1,6 +1,6 @@
 # Phase 12 — Network Monitoring
 
-**Status:** In Progress  
+**Status:** Done  
 *(Change to "Done" when this phase is complete)*
 
 ---

@@ -534,3 +534,194 @@ class TestNetworkStatsEndpointRBAC:
         assert "error" in data
         assert data["error"]["code"] == "NOT_FOUND"
 
+
+class TestNetworkMonitoringIntegration:
+    def test_full_network_monitoring_lifecycle(self, db_session):
+        """End-to-end network monitoring lifecycle:
+        1. Setup Org, Analyst user, Agent with credentials, and linked Device.
+        2. Agent posts initial heartbeat with network interfaces.
+        3. Verify DeviceInterface rows in database with initial byte counters.
+        4. Agent posts subsequent heartbeat with updated traffic stats.
+        5. Verify DeviceInterface rows are updated without duplication.
+        6. Analyst queries GET /api/v1/agents/{agent_id}/network-stats and verifies interface data.
+        """
+        uid = uuid.uuid4().hex[:8]
+        org = Organization(name=f"E2ENetOrg-{uid}", slug=f"e2e-net-org-{uid}")
+        db_session.add(org)
+        db_session.flush()
+
+        role = db_session.query(Role).filter(Role.name == "Security Analyst").first()
+        if not role:
+            role = Role(name="Security Analyst", description="Analyst")
+            db_session.add(role)
+            db_session.flush()
+
+        analyst = User(
+            organization_id=org.id,
+            role_id=role.id,
+            email=f"e2e_analyst_{uid}@test.com",
+            password_hash=hash_password("Pass123!"),
+            username=f"e2e-analyst-{uid}",
+            is_active=True,
+        )
+        db_session.add(analyst)
+        db_session.flush()
+
+        agent = Agent(
+            organization_id=org.id,
+            name=f"e2e-agent-{uid}",
+            hostname=f"e2e-host-{uid}",
+            status="ONLINE",
+            is_active=True,
+        )
+        db_session.add(agent)
+        db_session.flush()
+
+        raw_token = secrets.token_urlsafe(48)
+        cred_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        cred = AgentCredential(
+            agent_id=agent.id,
+            credential_hash=cred_hash,
+            type="token",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+            is_active=True,
+        )
+        db_session.add(cred)
+
+        device = Device(
+            organization_id=org.id,
+            agent_id=agent.id,
+            ip_address="192.168.10.15",
+            mac_address="00:aa:bb:cc:dd:ee",
+            hostname=f"monitored-device-{uid}",
+            status="online",
+        )
+        db_session.add(device)
+        db_session.commit()
+
+        # Step 2: Agent sends initial heartbeat with network stats
+        ts1 = datetime.now(timezone.utc).replace(microsecond=0)
+        payload1 = {
+            "agent_id": str(agent.id),
+            "timestamp": ts1.isoformat(),
+            "status": "ONLINE",
+            "version": "1.0.0",
+            "cpu_percent": 18.5,
+            "memory_percent": 42.0,
+            "details": {
+                "disk_usage_percent": 55,
+                "network": {
+                    "interfaces": [
+                        {
+                            "name": "eth0",
+                            "is_up": True,
+                            "bytes_sent": 100000,
+                            "bytes_received": 250000,
+                            "speed_mbps": 1000,
+                            "mac_address": "00:aa:bb:cc:dd:ee",
+                            "ip_address": "192.168.10.15",
+                        },
+                        {
+                            "name": "wlan0",
+                            "is_up": False,
+                            "bytes_sent": 5000,
+                            "bytes_received": 8000,
+                            "speed_mbps": 0,
+                            "mac_address": "00:aa:bb:cc:dd:ef",
+                            "ip_address": None,
+                        },
+                    ],
+                    "active_connections": 12,
+                },
+            },
+        }
+        resp1 = client.post(
+            "/api/v1/agents/heartbeat",
+            json=payload1,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        assert resp1.status_code == 200
+
+        # Step 3: Verify DeviceInterface rows
+        db_session.expire_all()
+        ifaces = db_session.query(DeviceInterface).filter(
+            DeviceInterface.device_id == device.id,
+        ).order_by(DeviceInterface.name).all()
+        assert len(ifaces) == 2
+        assert ifaces[0].name == "eth0"
+        assert ifaces[0].bytes_sent == 100000
+        assert ifaces[0].bytes_received == 250000
+        assert ifaces[1].name == "wlan0"
+        assert ifaces[1].bytes_sent == 5000
+        assert ifaces[1].bytes_received == 8000
+
+        # Step 4: Subsequent heartbeat with higher counters
+        ts2 = ts1 + timedelta(seconds=30)
+        payload2 = {
+            "agent_id": str(agent.id),
+            "timestamp": ts2.isoformat(),
+            "status": "ONLINE",
+            "version": "1.0.0",
+            "cpu_percent": 22.0,
+            "memory_percent": 44.0,
+            "details": {
+                "disk_usage_percent": 55,
+                "network": {
+                    "interfaces": [
+                        {
+                            "name": "eth0",
+                            "is_up": True,
+                            "bytes_sent": 200000,
+                            "bytes_received": 500000,
+                            "speed_mbps": 1000,
+                            "mac_address": "00:aa:bb:cc:dd:ee",
+                            "ip_address": "192.168.10.15",
+                        },
+                        {
+                            "name": "wlan0",
+                            "is_up": False,
+                            "bytes_sent": 12000,
+                            "bytes_received": 18000,
+                            "speed_mbps": 0,
+                            "mac_address": "00:aa:bb:cc:dd:ef",
+                            "ip_address": None,
+                        },
+                    ],
+                    "active_connections": 14,
+                },
+            },
+        }
+        resp2 = client.post(
+            "/api/v1/agents/heartbeat",
+            json=payload2,
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        assert resp2.status_code == 200
+
+        # Step 5: Verify records updated without duplication
+        db_session.expire_all()
+        updated_ifaces = db_session.query(DeviceInterface).filter(
+            DeviceInterface.device_id == device.id,
+        ).order_by(DeviceInterface.name).all()
+        assert len(updated_ifaces) == 2
+        assert updated_ifaces[0].bytes_sent == 200000
+        assert updated_ifaces[0].bytes_received == 500000
+        assert updated_ifaces[1].bytes_sent == 12000
+        assert updated_ifaces[1].bytes_received == 18000
+
+        # Step 6: Analyst queries network stats endpoint
+        analyst_token = _user_token(analyst, db_session)
+        stats_resp = client.get(
+            f"/api/v1/agents/{agent.id}/network-stats",
+            headers={"Authorization": f"Bearer {analyst_token}"},
+        )
+        assert stats_resp.status_code == 200
+        stats_data = stats_resp.json()
+        assert len(stats_data) >= 2
+        latest_snapshot = stats_data[0]
+        assert "network" in latest_snapshot["details"]
+        net_stats = latest_snapshot["details"]["network"]
+        assert len(net_stats["interfaces"]) == 2
+        assert net_stats["active_connections"] == 14
+
+
