@@ -10,10 +10,17 @@ email domain suffix is logged (e.g. "...@example.com"), and only to confirm
 seeding completed — the full email value is not written to any log line.
 """
 
+import json
+import os
+import uuid
+from typing import Optional
+from sqlalchemy.orm import Session
+
 from app.core.database import get_session_factory
 from app.core.logging import get_logger
 from app.core.security import hash_password
 from app.models.organization import Organization, Role
+from app.models.scan import CVE
 from app.models.user import User
 
 logger = get_logger("seed")
@@ -66,7 +73,12 @@ def seed_roles_and_admin(settings) -> None:
             logger.info("Seeded default organization")
 
         # ----------------------------------------------------------------
-        # 3. Seed default admin user (idempotent)
+        # 3. Seed demo CVE data for default organization (idempotent)
+        # ----------------------------------------------------------------
+        seed_cves(db=db, organization_id=default_org.id)
+
+        # ----------------------------------------------------------------
+        # 4. Seed default admin user (idempotent)
         # Only runs if SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are set.
         # Credentials are never logged.
         # ----------------------------------------------------------------
@@ -109,3 +121,84 @@ def seed_roles_and_admin(settings) -> None:
         raise
     finally:
         db.close()
+
+
+def seed_cves(db: Optional[Session] = None, organization_id: Optional[uuid.UUID] = None) -> int:
+    """Seed demo CVE entries into the cves table if empty for the organization.
+
+    Args:
+        db: Optional existing SQLAlchemy session. If None, a new session is opened and closed.
+        organization_id: Organization to associate seed CVEs with. Defaults to default org.
+
+    Returns:
+        Number of CVE records inserted.
+    """
+    close_when_done = False
+    if db is None:
+        SessionLocal = get_session_factory()
+        db = SessionLocal()
+        close_when_done = True
+
+    try:
+        if organization_id is None:
+            default_org = db.query(Organization).filter(Organization.slug == "default").first()
+            if not default_org:
+                logger.warning("No default organization found — skipping CVE seed")
+                return 0
+            organization_id = default_org.id
+
+        # Check existing CVEs across table (cve_id is unique)
+        existing_cve_ids = {
+            c.cve_id for c in db.query(CVE.cve_id).all()
+        }
+        if len(existing_cve_ids) >= 10:
+            logger.info("CVE seed data already present — skipping")
+            return 0
+
+        # Load seed JSON from backend/data/cve_seed.json
+        data_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "cve_seed.json"
+        )
+        if not os.path.exists(data_path):
+            logger.warning(f"CVE seed file not found at {data_path}")
+            return 0
+
+        with open(data_path, "r", encoding="utf-8") as f:
+            cve_list = json.load(f)
+
+        seeded_count = 0
+        for item in cve_list:
+            cve_id = item.get("cve_id")
+            if not cve_id or cve_id in existing_cve_ids:
+                continue
+
+            cve_record = CVE(
+                organization_id=organization_id,
+                cve_id=cve_id,
+                severity=item.get("severity", "Medium"),
+                cvss_score=item.get("cvss_score"),
+                affected_service=item.get("affected_service"),
+                affected_version=item.get("affected_version"),
+                summary=item.get("summary", ""),
+                recommendation=item.get("recommendation"),
+                source=item.get("source", "local_seed"),
+                is_demo_data=item.get("is_demo_data", True),
+            )
+            db.add(cve_record)
+            existing_cve_ids.add(cve_id)
+            seeded_count += 1
+
+        if seeded_count > 0:
+            db.commit()
+            logger.info(f"Seeded {seeded_count} CVE entries for organization {organization_id}")
+
+        return seeded_count
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"CVE seeding failed ({type(e).__name__}): {e}")
+        return 0
+    finally:
+        if close_when_done:
+            db.close()
+

@@ -1,0 +1,167 @@
+[
+  {
+    "cve_id": "CVE-2021-44228",
+    "severity": "Critical",
+    "cvss_score": 10.0,
+    "affected_service": "log4j",
+    "affected_version": "2.14.1",
+    "summary": "Apache Log4j2 JNDI features do not protect against attacker controlled LDAP and other JNDI related endpoints, allowing remote code execution.",
+    "recommendation": "Upgrade to Apache Log4j 2.15.0 or later, or set log4j2.formatMsgNoLookups to true.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2021-41773",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "apache",
+    "affected_version": "2.4.49",
+    "summary": "Path traversal flaw in Apache HTTP Server 2.4.49 allows unauthenticated remote attackers to map URLs to files outside the document root.",
+    "recommendation": "Update Apache HTTP Server to version 2.4.51 or later.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2018-15473",
+    "severity": "Medium",
+    "cvss_score": 5.3,
+    "affected_service": "openssh",
+    "affected_version": "7.4",
+    "summary": "OpenSSH through version 7.7 is prone to a user enumeration vulnerability due to differences in response times for authentication requests.",
+    "recommendation": "Upgrade OpenSSH to version 7.8 or higher.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2023-38408",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "openssh",
+    "affected_version": "9.3",
+    "summary": "Condition in ssh-agent PKCS#11 provider allows remote code execution when forwarded to an untrusted host.",
+    "recommendation": "Upgrade OpenSSH to version 9.3p2 or later.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2021-23017",
+    "severity": "High",
+    "cvss_score": 7.7,
+    "affected_service": "nginx",
+    "affected_version": "1.20.0",
+    "summary": "1-byte memory overwrite in Nginx DNS resolver allows remote attacker to cause denial of service or potentially arbitrary code execution.",
+    "recommendation": "Upgrade Nginx to version 1.20.1 or 1.21.0 or later.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2011-2523",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "vsftpd",
+    "affected_version": "2.3.4",
+    "summary": "Backdoor command execution in vsftpd 2.3.4 contains code that opens a shell on port 6200 when a username with smiley smiley face is entered.",
+    "recommendation": "Upgrade vsftpd to version 3.0 or later or remove compromised package.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2017-0144",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "smb",
+    "affected_version": "v1",
+    "summary": "Remote code execution flaw in Microsoft SMBv1 server (EternalBlue) allowing arbitrary code execution on target system.",
+    "recommendation": "Apply Microsoft Security Bulletin MS17-010 and disable SMBv1.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2019-0708",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "rdp",
+    "affected_version": "terminal_services",
+    "summary": "Remote Desktop Services remote code execution vulnerability (BlueKeep) allows pre-authentication remote code execution.",
+    "recommendation": "Apply Microsoft security update for CVE-2019-0708 and enable Network Level Authentication (NLA).",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2022-22965",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "spring",
+    "affected_version": "5.3.17",
+    "summary": "Spring Framework RCE via Data Binding on JDK 9+ allows remote attackers to obtain remote code execution via access to ClassLoader.",
+    "recommendation": "Upgrade Spring Framework to version 5.3.18 or 5.2.20 or later.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2020-1472",
+    "severity": "Critical",
+    "cvss_score": 10.0,
+    "affected_service": "netlogon",
+    "affected_version": "zerologon",
+    "summary": "Elevation of privilege vulnerability in Netlogon Remote Protocol (Zerologon) allows unauthenticated domain compromise.",
+    "recommendation": "Apply Microsoft update for CVE-2020-1472 and enforce secure RPC communications.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2023-3519",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "citrix",
+    "affected_version": "13.1",
+    "summary": "Unauthenticated remote code execution in Citrix NetScaler ADC and NetScaler Gateway.",
+    "recommendation": "Update NetScaler to version 13.1-49.13 or newer build.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2021-26855",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "exchange",
+    "affected_version": "2016",
+    "summary": "Microsoft Exchange Server Server-Side Request Forgery vulnerability (ProxyLogon) allowing remote mail access.",
+    "recommendation": "Apply Microsoft security updates for Exchange Server.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2022-26134",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "confluence",
+    "affected_version": "7.13.0",
+    "summary": "OGNL injection vulnerability in Atlassian Confluence Server allowing unauthenticated attackers to execute arbitrary code.",
+    "recommendation": "Upgrade Confluence Server to version 7.13.7, 7.18.05, or later.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2023-27997",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "fortios",
+    "affected_version": "7.0.0",
+    "summary": "Heap-based buffer overflow in FortiOS SSL-VPN allows remote unauthenticated attacker to execute arbitrary code.",
+    "recommendation": "Upgrade FortiOS firmware to version 7.0.12, 7.2.5, or newer.",
+    "source": "local_seed",
+    "is_demo_data": true
+  },
+  {
+    "cve_id": "CVE-2020-1938",
+    "severity": "Critical",
+    "cvss_score": 9.8,
+    "affected_service": "tomcat",
+    "affected_version": "9.0.30",
+    "summary": "AJP protocol file inclusion and potential remote code execution in Apache Tomcat (Ghostcat).",
+    "recommendation": "Upgrade Apache Tomcat to 9.0.31 or disable AJP Connector if not needed.",
+    "source": "local_seed",
+    "is_demo_data": true
+  }
+]
