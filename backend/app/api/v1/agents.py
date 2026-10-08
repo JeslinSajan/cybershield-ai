@@ -491,10 +491,13 @@ async def upload_result(
     scan.status = "COMPLETED"
     scan.completed_at = datetime.now(timezone.utc)
     
-    # Process discovery results to populate devices inventory
+    # Process results based on result_type
     if body.result_type == "discovery":
         from app.services.discovery_service import process_discovery_result
         process_discovery_result(db, result, agent)
+    elif body.result_type == "services":
+        from app.services.vulnerability_service import process_vulnerability_result
+        process_vulnerability_result(db, result, agent)
         
     db.commit()
     db.refresh(result)
