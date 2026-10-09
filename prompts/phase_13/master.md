@@ -1,7 +1,6 @@
 # Phase 13 — Vulnerability Scanning
 
-**Status:** In Progress  
-*(Change to "Done" when this phase is complete)*
+**Status:** Done  
 
 ---
 

@@ -1,7 +1,7 @@
 # Phase 13 Progress Tracker — Vulnerability Scanning
 
-**Phase Status:** In Progress  
-**Current Task:** 13.5 Vulnerability Scanning Integration & Verification
+**Phase Status:** Completed  
+**Current Task:** None (Phase Complete)
 
 ---
 
@@ -13,27 +13,27 @@
 | 13.2 | Agent Vulnerability Scanner Module | Completed | agent/collectors/vulnerability_scanner.py, agent/task_poller.py, tests/test_vulnerability_scanner.py | test_vulnerability_scanner.py PASSED (12/12) |
 | 13.3 | Vulnerability Processing Service | Completed | backend/app/services/vulnerability_service.py, backend/app/api/v1/agents.py, tests/test_vulnerabilities.py | test_vulnerabilities.py PASSED (7/7) |
 | 13.4 | Vulnerability Endpoints & Device Linking | Completed | backend/app/api/v1/vulnerabilities.py, backend/app/api/v1/devices.py, docs/api/vulnerability-api.md, tests/test_vulnerabilities.py | test_vulnerabilities.py PASSED (13/13) |
-| 13.5 | Vulnerability Scanning Integration & Verification | Pending | — | — |
+| 13.5 | Vulnerability Scanning Integration & Verification | Completed | tests/test_vulnerabilities.py, prompts/HANDOFF.md, prompts/phase_13/master.md, prompts/phase_13_vulnerability_scanning.md, prompts/phase_13/progress.md | test_vulnerabilities.py PASSED (14/14), full regression suite 150 passed |
 
 ---
 
 ## Last Completed Task Details
 
-### Task 13.4: Vulnerability Endpoints & Device Linking
+### Task 13.5: Vulnerability Scanning Integration & Final Verification
 - **Completed at:** 2026-10-09
 - **Files Modified / Created:**
-  - `backend/app/api/v1/vulnerabilities.py`: implemented `GET /api/v1/vulnerabilities/` (with filters for `severity`, `status`, `device_id`, pagination, CVE join) and `GET /api/v1/vulnerabilities/{vuln_id}` (detail with full CVE info and 404 envelope), accessible to all authenticated roles (`get_any_authenticated_user`).
-  - `backend/app/api/v1/devices.py`: added `GET /api/v1/devices/{device_id}/vulnerabilities` with organization isolation and 404 check.
-  - `docs/api/vulnerability-api.md`: created API contract document for the vulnerability endpoints.
-  - `tests/test_vulnerabilities.py`: added `TestVulnerabilityEndpoints` test class verifying RBAC across all 3 roles, filter parameters, single vulnerability detail, device vulnerability queries, and cross-organization access isolation.
+  - `tests/test_vulnerabilities.py`: implemented `TestVulnerabilityScanningIntegration` verifying the complete lifecycle (scan dispatch, agent task polling, result upload with `result_type="services"`, background CVE matching, `COMPLETED` scan status, `/vulnerabilities/` listing, and per-device vulnerability retrieval).
+  - `prompts/HANDOFF.md`: updated with comprehensive Phase 13 artifacts, schema verification, endpoint contracts, and test evidence.
+  - `prompts/phase_13/master.md` & `prompts/phase_13_vulnerability_scanning.md`: marked phase status as `Done`.
+  - `prompts/phase_13/progress.md`: marked phase as `Completed`.
 - **Tests Passed:**
-  - `tests/test_vulnerabilities.py` (13 passed)
-  - `tests/test_devices.py` (6 passed)
+  - `tests/test_vulnerabilities.py` (14 passed)
   - `tests/test_vulnerability_scanner.py` (12 passed)
+  - Full test suite: 150 passed, 2 pre-existing failures from Phase 8. Zero regressions.
 - **Known Issues:** None.
 
 ---
 
-## Next Task
-- **ID:** 13.5
-- **File:** `prompts/phase_13/task_13_05_integration_and_verification.md`
+## Next Phase
+- **Phase:** 14 — Log Management
+- **File:** `prompts/phase_14_log_management.md`

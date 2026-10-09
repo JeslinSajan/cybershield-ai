@@ -290,9 +290,33 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 13 — Vulnerability Scanning — ⬜ Not Started
+## Phase 13 — Vulnerability Scanning — COMPLETED 2026-10-09
 
-*Append after Phase 13.*
+### Database & Schema Verification:
+- `cves` table: id (UUID PK), organization_id (UUID FK), cve_id (String unique), severity (String), cvss_score (Numeric), affected_service (String), affected_version (String), summary (Text), recommendation (Text), source (String), is_demo_data (Boolean), created_at, updated_at.
+- `vulnerabilities` table: id (UUID PK), organization_id (UUID FK), device_id (UUID FK), scan_id (UUID FK), cve_id (UUID FK → cves.id), severity (String), score (Numeric), description (Text), recommendation (Text), status (String, default 'open'), created_at, updated_at.
+- Seed data: `backend/data/cve_seed.json` with 15 realistic CVE records loaded idempotently via `seed_cves()`.
+
+### Agent Vulnerability Scanner:
+- `agent/collectors/vulnerability_scanner.py`: `scan_vulnerabilities(target_ip)` runs `nmap -sV --open -T4` when installed on PATH; safely falls back to socket connection probing on common ports (21, 22, 80, 443, 3389, 8080) with service banner analysis without crashing if Nmap is absent.
+- `agent/task_poller.py`: `handle_vulnerability()` processes `scan_type == "vulnerability"` tasks and posts results to `/agents/results` with `result_type="services"` and offline queue retry support.
+
+### Processing Service:
+- `backend/app/services/vulnerability_service.py`: `process_vulnerability_result(db, scan_result, agent)` resolves or creates the target `Device` record by IP address, matches services and versions against candidate CVEs using case-insensitive substring search, creates `Vulnerability` rows linking to `cves.id` (UUID), enforces deduplication to prevent duplicate open vulnerabilities for the same device and CVE, and records `AuditLog` events (`action="vulnerabilities_detected"`).
+
+### Endpoints Created / Extended:
+- `GET /api/v1/vulnerabilities/` (All 3 roles — Viewer, Analyst, Admin): lists vulnerabilities with `severity`, `status`, `device_id` filtering, pagination (`limit`, `offset`), and CVE outer join for `cve_code`.
+- `GET /api/v1/vulnerabilities/{vuln_id}` (All 3 roles): returns vulnerability detail with full embedded `cve_details`, with 404 error envelope if missing.
+- `GET /api/v1/devices/{device_id}/vulnerabilities` (All 3 roles): returns all vulnerabilities discovered for a device.
+- `POST /api/v1/agents/results`: extended to invoke `process_vulnerability_result()` when `result_type == "services"`.
+
+### Documentation:
+- `docs/api/vulnerability-api.md`: complete API contract for human-facing vulnerability endpoints.
+
+### Test Evidence:
+- `tests/test_vulnerabilities.py` (14 passed, including full lifecycle integration)
+- `tests/test_vulnerability_scanner.py` (12 passed)
+- Full regression suite: 150 passed, 2 pre-existing failures from Phase 8. Zero regressions.
 
 ---
 

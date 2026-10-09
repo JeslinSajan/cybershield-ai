@@ -648,3 +648,172 @@ class TestVulnerabilityEndpoints:
         assert resp_dev.status_code == 404
         assert resp_dev.json()["error"]["code"] == "NOT_FOUND"
 
+
+class TestVulnerabilityScanningIntegration:
+    def test_full_vulnerability_scanning_lifecycle(self, db_session):
+        """End-to-end integration test covering scan trigger, task polling, agent upload, matching, and retrieval."""
+        from app.core.security import create_access_token, hash_password
+        from app.core.seed import CANONICAL_ROLES
+
+        uid = uuid.uuid4().hex[:8]
+        org = Organization(name=f"IntegVulnOrg-{uid}", slug=f"integ-vuln-org-{uid}")
+        db_session.add(org)
+        db_session.flush()
+
+        roles = {}
+        for name, desc in CANONICAL_ROLES:
+            existing = db_session.query(Role).filter(Role.name == name).first()
+            if existing:
+                roles[name] = existing
+            else:
+                r = Role(name=name, description=desc)
+                db_session.add(r)
+                db_session.flush()
+                roles[name] = r
+
+        analyst = User(
+            organization_id=org.id,
+            role_id=roles["Security Analyst"].id,
+            email=f"integ-analyst-{uid}@test.com",
+            username=f"integ-analyst-{uid}",
+            password_hash=hash_password("Pass123!"),
+            is_active=True,
+        )
+        viewer = User(
+            organization_id=org.id,
+            role_id=roles["Viewer"].id,
+            email=f"integ-viewer-{uid}@test.com",
+            username=f"integ-viewer-{uid}",
+            password_hash=hash_password("Pass123!"),
+            is_active=True,
+        )
+        agent = Agent(
+            organization_id=org.id,
+            name=f"integ-agent-{uid}",
+            hostname="integ-host",
+            status="ONLINE",
+            is_active=True,
+        )
+        db_session.add_all([analyst, viewer, agent])
+        db_session.flush()
+
+        raw_cred = secrets.token_urlsafe(48)
+        cred_hash = hashlib.sha256(raw_cred.encode()).hexdigest()
+        cred = AgentCredential(
+            agent_id=agent.id,
+            credential_hash=cred_hash,
+            type="token",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+            is_active=True,
+        )
+        db_session.add(cred)
+        db_session.flush()
+
+        # Step 1: Ensure CVEs are seeded
+        seed_count = db_session.query(CVE).count()
+        if seed_count < 10:
+            seed_cves(db=db_session, organization_id=org.id)
+            seed_count = db_session.query(CVE).count()
+        assert seed_count >= 10
+        db_session.commit()
+
+        token_analyst = create_access_token(str(analyst.id), "Security Analyst", str(org.id))
+        token_viewer = create_access_token(str(viewer.id), "Viewer", str(org.id))
+
+        # Step 2: Analyst creates vulnerability scan via POST /api/v1/scans/
+        create_scan_resp = client.post(
+            "/api/v1/scans/",
+            headers={"Authorization": f"Bearer {token_analyst}"},
+            json={
+                "agent_id": str(agent.id),
+                "scan_type": "vulnerability",
+                "target_scope": "192.168.1.150",
+            },
+        )
+        assert create_scan_resp.status_code == 201, create_scan_resp.text
+        scan_id = create_scan_resp.json()["id"]
+
+        # Step 3: Agent polls task via GET /api/v1/agents/tasks
+        poll_resp = client.get(
+            "/api/v1/agents/tasks",
+            headers={"Authorization": f"Bearer {raw_cred}"},
+        )
+        assert poll_resp.status_code == 200
+        tasks = poll_resp.json()
+        assert any(t["id"] == scan_id for t in tasks)
+
+        # Mark task RUNNING
+        client.post(
+            f"/api/v1/agents/tasks/{scan_id}/status",
+            headers={"Authorization": f"Bearer {raw_cred}"},
+            json={"status": "RUNNING"},
+        )
+
+        # Step 4: Agent uploads result via POST /api/v1/agents/results with result_type="services"
+        upload_resp = client.post(
+            "/api/v1/agents/results",
+            headers={"Authorization": f"Bearer {raw_cred}"},
+            json={
+                "scan_id": scan_id,
+                "upload_id": str(uuid.uuid4()),
+                "result_type": "services",
+                "raw_payload": {
+                    "target_ip": "192.168.1.150",
+                    "services": [
+                        {
+                            "port": 80,
+                            "protocol": "tcp",
+                            "service": "http",
+                            "version": "Apache httpd 2.4.49",
+                            "state": "open",
+                        },
+                        {
+                            "port": 21,
+                            "protocol": "tcp",
+                            "service": "vsftpd",
+                            "version": "2.3.4",
+                            "state": "open",
+                        },
+                    ],
+                },
+            },
+        )
+        assert upload_resp.status_code == 201, upload_resp.text
+        upload_data = upload_resp.json()
+        assert upload_data["result_type"] == "services"
+        assert upload_data["device_id"] is not None
+        device_id = upload_data["device_id"]
+
+        # Step 5: Verify scan status is COMPLETED
+        scan_check = client.get(
+            f"/api/v1/scans/{scan_id}",
+            headers={"Authorization": f"Bearer {token_analyst}"},
+        )
+        assert scan_check.status_code == 200
+        assert scan_check.json()["status"] == "COMPLETED"
+
+        # Step 6: Viewer queries GET /api/v1/vulnerabilities/
+        list_vulns_resp = client.get(
+            "/api/v1/vulnerabilities/",
+            headers={"Authorization": f"Bearer {token_viewer}"},
+        )
+        assert list_vulns_resp.status_code == 200
+        vulns_list = list_vulns_resp.json()
+        assert len(vulns_list) >= 2
+        detected_cves = {v["cve_code"] for v in vulns_list}
+        assert "CVE-2021-41773" in detected_cves
+        assert "CVE-2011-2523" in detected_cves
+
+        # Step 7: Viewer queries GET /api/v1/devices/{device_id}/vulnerabilities
+        device_vulns_resp = client.get(
+            f"/api/v1/devices/{device_id}/vulnerabilities",
+            headers={"Authorization": f"Bearer {token_viewer}"},
+        )
+        assert device_vulns_resp.status_code == 200
+        device_vulns = device_vulns_resp.json()
+        assert len(device_vulns) >= 2
+        for v in device_vulns:
+            assert v["device_id"] == str(device_id)
+            assert v["status"] == "open"
+
+
