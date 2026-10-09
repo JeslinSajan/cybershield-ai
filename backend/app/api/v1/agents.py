@@ -11,6 +11,7 @@ Endpoints:
 """
 
 import hashlib
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,8 @@ from typing import Annotated, List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger("app.api.agents")
 
 from app.core.database import get_db
 from app.core.deps import (
@@ -513,6 +516,11 @@ async def upload_result(
     elif body.result_type == "services":
         from app.services.vulnerability_service import process_vulnerability_result
         process_vulnerability_result(db, result, agent)
+        try:
+            from app.services.detection_service import process_scan_detections
+            process_scan_detections(db, org_id=agent.organization_id, agent_id=agent.id, scan_result=result)
+        except Exception as e:
+            logger.warning(f"Error evaluating scan detection rules: {e}")
         
     db.commit()
     db.refresh(result)
@@ -598,6 +606,14 @@ async def ingest_agent_logs(
     db.commit()
     for row in log_rows:
         db.refresh(row)
+
+    # Evaluate threat detection rules synchronously
+    try:
+        from app.services.detection_service import process_log_detections
+        process_log_detections(db, org_id=agent.organization_id, agent_id=agent.id, logs=log_rows)
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Error evaluating log detection rules: {e}")
 
     return {
         "ingested_count": len(log_rows),
