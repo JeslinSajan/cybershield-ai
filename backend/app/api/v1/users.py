@@ -51,20 +51,22 @@ def _get_role_by_id(db: Session, role_id: uuid.UUID) -> Role:
     return role
 
 
-def _count_active_admins(db: Session) -> int:
-    """Count active, non-deleted Administrator users."""
+def _count_active_admins(db: Session, organization_id: uuid.UUID | None = None) -> int:
+    """Count active, non-deleted Administrator users in the specified organization (or across DB if None)."""
     admin_role = db.query(Role).filter(Role.name == "Administrator").first()
     if not admin_role:
         return 0
-    return (
+    query = (
         db.query(User)
         .filter(
             User.role_id == admin_role.id,
             User.is_active.is_(True),
             User.deleted_at.is_(None),
         )
-        .count()
     )
+    if organization_id is not None:
+        query = query.filter(User.organization_id == organization_id)
+    return query.count()
 
 
 def _last_admin_protection(db: Session, user: User, new_role_id: uuid.UUID | None = None, deactivating: bool = False) -> None:
@@ -82,7 +84,7 @@ def _last_admin_protection(db: Session, user: User, new_role_id: uuid.UUID | Non
     if not (is_demoting or deactivating):
         return
 
-    active_admins = _count_active_admins(db)
+    active_admins = _count_active_admins(db, organization_id=user.organization_id)
     if active_admins <= 1:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
