@@ -604,3 +604,173 @@ class TestLogQueryEndpoints:
         )
         assert resp_isolated.status_code == 404
         assert resp_isolated.json()["error"]["code"] == "NOT_FOUND"
+
+
+class TestLogManagementIntegration:
+    @pytest.fixture
+    def setup_e2e_env(self, db_session):
+        uid = uuid.uuid4().hex[:8]
+        org = Organization(name=f"E2EOrg-{uid}", slug=f"e2e-org-{uid}")
+        db_session.add(org)
+        db_session.flush()
+
+        roles = {}
+        for name, desc in CANONICAL_ROLES:
+            existing = db_session.query(Role).filter(Role.name == name).first()
+            if existing:
+                roles[name] = existing
+            else:
+                r = Role(name=name, description=desc)
+                db_session.add(r)
+                db_session.flush()
+                roles[name] = r
+
+        viewer = User(
+            organization_id=org.id,
+            role_id=roles["Viewer"].id,
+            email=f"viewer-e2e-{uid}@test.com",
+            username=f"viewer-e2e-{uid}",
+            password_hash=hash_password("ViewerPass123!"),
+            is_active=True,
+        )
+        db_session.add(viewer)
+
+        agent = Agent(
+            organization_id=org.id,
+            name=f"e2e-agent-{uid}",
+            hostname="e2e-host",
+            status="ONLINE",
+            is_active=True,
+        )
+        db_session.add(agent)
+        db_session.flush()
+
+        raw_cred = secrets.token_urlsafe(48)
+        cred_hash = hashlib.sha256(raw_cred.encode()).hexdigest()
+        cred = AgentCredential(
+            agent_id=agent.id,
+            credential_hash=cred_hash,
+            type="token",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+            is_active=True,
+        )
+        db_session.add(cred)
+
+        device = Device(
+            organization_id=org.id,
+            agent_id=agent.id,
+            ip_address="192.168.1.88",
+            hostname="e2e-host",
+            status="online",
+        )
+        db_session.add(device)
+        db_session.commit()
+
+        token_viewer = create_access_token(str(viewer.id), "Viewer", str(org.id))
+
+        return {
+            "org": org,
+            "agent": agent,
+            "raw_cred": raw_cred,
+            "device": device,
+            "viewer": viewer,
+            "token_viewer": token_viewer,
+        }
+
+    def test_end_to_end_log_lifecycle(self, setup_e2e_env, db_session):
+        """End-to-end integration test:
+        1. Agent uploads batch of logs (login_failure, login_success).
+        2. Backend stores logs with correct severities, linking device.
+        3. Viewer queries list of logs and filters by event_type.
+        4. Viewer queries single log by ID and validates data integrity.
+        """
+        env = setup_e2e_env
+        raw_cred = env["raw_cred"]
+        token_viewer = env["token_viewer"]
+        agent = env["agent"]
+        device = env["device"]
+
+        t1 = (datetime.now(timezone.utc) - timedelta(minutes=5)).replace(microsecond=0)
+        t2 = datetime.now(timezone.utc).replace(microsecond=0)
+
+        # Step 1: Agent posts batch
+        payload = {
+            "logs": [
+                {
+                    "source": "auth.log",
+                    "event_type": "login_failure",
+                    "message": "Failed password for invalid user hacker from 203.0.113.5 port 44332",
+                    "source_ip": "203.0.113.5",
+                    "username": "hacker",
+                    "timestamp": t1.isoformat(),
+                },
+                {
+                    "source": "auth.log",
+                    "event_type": "login_success",
+                    "message": "Accepted publickey for sysadmin from 192.168.1.88 port 22",
+                    "source_ip": "192.168.1.88",
+                    "username": "sysadmin",
+                    "timestamp": t2.isoformat(),
+                },
+            ]
+        }
+
+        resp_ingest = client.post(
+            "/api/v1/agents/logs",
+            headers={"Authorization": f"Bearer {raw_cred}"},
+            json=payload,
+        )
+        assert resp_ingest.status_code == 201
+        data_ingest = resp_ingest.json()
+        assert data_ingest["ingested_count"] == 2
+        log_ids = data_ingest["log_ids"]
+        assert len(log_ids) == 2
+
+        # Step 2: Verify in DB
+        db_logs = db_session.query(Log).filter(Log.id.in_([uuid.UUID(i) for i in log_ids])).all()
+        assert len(db_logs) == 2
+        by_event = {l.event_type: l for l in db_logs}
+        assert by_event["login_failure"].severity == "medium"
+        assert by_event["login_failure"].username == "hacker"
+        assert by_event["login_success"].severity == "low"
+        assert by_event["login_success"].username == "sysadmin"
+        assert by_event["login_success"].device_id == device.id
+
+        # Step 3: Viewer queries list and filters
+        resp_list = client.get(
+            "/api/v1/logs/",
+            headers={"Authorization": f"Bearer {token_viewer}"},
+        )
+        assert resp_list.status_code == 200
+        logs_listed = resp_list.json()
+        assert len(logs_listed) >= 2
+
+        resp_fail_filter = client.get(
+            "/api/v1/logs/?event_type=login_failure",
+            headers={"Authorization": f"Bearer {token_viewer}"},
+        )
+        assert resp_fail_filter.status_code == 200
+        fail_logs = resp_fail_filter.json()
+        assert all(item["event_type"] == "login_failure" for item in fail_logs)
+
+        resp_success_filter = client.get(
+            "/api/v1/logs/?event_type=login_success",
+            headers={"Authorization": f"Bearer {token_viewer}"},
+        )
+        assert resp_success_filter.status_code == 200
+        success_logs = resp_success_filter.json()
+        assert all(item["event_type"] == "login_success" for item in success_logs)
+
+        # Step 4: Viewer queries detail
+        single_log_id = log_ids[0]
+        resp_detail = client.get(
+            f"/api/v1/logs/{single_log_id}",
+            headers={"Authorization": f"Bearer {token_viewer}"},
+        )
+        assert resp_detail.status_code == 200
+        detail_data = resp_detail.json()
+        assert detail_data["id"] == single_log_id
+        assert detail_data["organization_id"] == str(env["org"].id)
+        assert detail_data["agent_id"] == str(agent.id)
+        assert detail_data["source"] == "auth.log"
+        assert detail_data["event_type"] in ("login_failure", "login_success")

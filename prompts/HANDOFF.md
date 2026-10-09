@@ -320,9 +320,43 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 14 — Log Management — ⬜ Not Started
+## Phase 14 — Log Management — COMPLETED 2026-10-09
 
-*Append after Phase 14.*
+### Database & Schema Verification:
+- `logs` table: `id` (UUID PK), `organization_id` (UUID FK), `agent_id` (UUID FK), `device_id` (UUID FK nullable), `source` (String(80)), `event_type` (String(80)), `severity` (String(20)), `message` (Text), `source_ip` (INET string), `username` (String(120)), `timestamp` (DateTime(timezone=True)), `created_at`, `updated_at`.
+- Valid event types: `"login_failure"`, `"login_success"`.
+- Severity mapping: `"login_failure"` → `"medium"`, `"login_success"` → `"low"`, other/unspecified → `"info"`.
+
+### Backend Endpoints:
+- `POST /api/v1/agents/logs` (Agent Credential auth):
+  - Ingests single or batch log entries. Accepts either `{"logs": [...]}` or direct `[...]` JSON list.
+  - Links to existing or auto-associated `Device` by agent id or source IP.
+  - Automatically normalizes severity to lowercase.
+  - Returns `{"ingested_count": N, "log_ids": [...]}`.
+- `GET /api/v1/logs/` (All 3 roles — Viewer, Security Analyst, Administrator):
+  - Strict tenant isolation: `organization_id == current_user.organization_id`.
+  - Filters supported: `event_type`, `source`, `severity`, `username`, `source_ip`, `from_date` / `start_time`, `to_date` / `end_time`, `device_id`, `agent_id`.
+  - Pagination supported: `limit` (default 50, max 200) and `offset`.
+  - Ordered by newest timestamp first (`timestamp.desc()`).
+- `GET /api/v1/logs/{log_id}` (All 3 roles):
+  - Returns single log entry within caller's organization.
+  - Returns 404 with standard error envelope `{"error": {"code": "NOT_FOUND", ...}}` if non-existent or cross-tenant.
+
+### Agent Application:
+- `agent/collectors/log_collector.py`:
+  - Parses Linux `/var/log/auth.log` and `/var/log/secure` for SSH authentication events.
+  - Reads Windows Security Event Log (Event IDs 4624/4625) via `pywin32`.
+  - Safe Windows fallback: when `pywin32` is not installed, logs an informational warning and safely returns `[]` without crashing.
+  - State tracking: tracks `last_sent_timestamp` in `agent_log_state.json` to prevent re-sending duplicate events.
+  - `collect_and_send_logs(api_client, ...)` transmits logs to `/agents/logs`.
+- `agent/config.py`: added `LOG_COLLECT_INTERVAL` (default 30 seconds).
+- `agent/main.py`: integrated periodic log collection loop.
+- `agent/INSTALL.md` & `agent/README.md`: documented optional `pywin32` installation.
+
+### Test Evidence:
+- `tests/test_logs.py`: 18 passed (agent ingestion, role queries, filters, pagination, 404, multi-tenant isolation, end-to-end integration lifecycle).
+- `tests/test_agent_log_collector.py`: 11 passed (syslog/ISO line parsing, Windows fallback, state persistence and deduplication, mock transmission).
+- Full regression suite: 181 passed, 0 failures. Zero regressions.
 
 ---
 
