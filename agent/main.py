@@ -18,6 +18,7 @@ from agent.heartbeat import send_heartbeat
 from agent.identity import load_identity, save_identity
 from agent.offline_queue import OfflineQueue
 from agent.task_poller import poll_tasks, handle_task
+from agent.collectors.log_collector import collect_and_send_logs
 
 # Configure logging
 logging.basicConfig(
@@ -56,6 +57,7 @@ def main():
     last_heartbeat = 0
     last_task_poll = 0
     last_queue_drain = 0
+    last_log_collect = 0
     QUEUE_DRAIN_INTERVAL = 60  # Try to drain queue every 60 seconds
     
     while True:
@@ -87,6 +89,19 @@ def main():
                 logger.error("Credential rejected — contact admin to revoke and re-enroll.")
                 sys.exit(1)
             last_task_poll = time.time()
+
+        # Log collection
+        if now - last_log_collect >= config.LOG_COLLECT_INTERVAL:
+            try:
+                sent_count = collect_and_send_logs(api_client, identity["agent_id"])
+                if sent_count > 0:
+                    logger.info(f"Collected and transmitted {sent_count} log entries")
+            except Exception as e:
+                logger.warning(f"Error during log collection: {e}")
+            if not api_client._credential_valid:
+                logger.error("Credential rejected — contact admin to revoke and re-enroll.")
+                sys.exit(1)
+            last_log_collect = time.time()
             
         time.sleep(1)
 

@@ -6,6 +6,8 @@
   - Linux: `sudo apt install nmap`
   - Windows: https://nmap.org/download.html
   - macOS: `brew install nmap`
+- Optional Windows Event Log Support:
+  - Windows: `pip install pywin32` (optional; if not installed, the agent logs a warning and skips Windows Security Event Log collection without failing)
 
 ## Setup
 
