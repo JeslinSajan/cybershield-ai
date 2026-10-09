@@ -338,6 +338,14 @@ async def update_alert_status(
     db.refresh(alert)
     db.refresh(event)
 
+    # Recalculate device risk if alert is resolved or marked false positive
+    if to_status in ("Resolved", "False Positive") and alert.device_id:
+        try:
+            from app.services.risk_service import calculate_device_risk
+            calculate_device_risk(db, alert.device_id, current_user.organization_id)
+        except Exception as e:
+            pass
+
     return {
         "id": str(alert.id),
         "status": alert.status,

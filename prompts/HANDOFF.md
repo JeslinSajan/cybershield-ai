@@ -439,9 +439,61 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 17 — Risk Scoring — ⬜ Not Started
+## Phase 17 — Risk Scoring — ✅ COMPLETED 2026-10-09
 
-*Append after Phase 17.*
+### Endpoints Implemented:
+- `GET /api/v1/devices/{device_id}/risk` (`get_any_authenticated_user`):
+  - Returns current dynamic risk score, risk band, and parsed `factor_breakdown` for the target device.
+  - Isolated by caller's `organization_id` (404 on cross-tenant access).
+- `GET /api/v1/risk-scores/` (`get_any_authenticated_user`):
+  - Returns risk scores for all devices in the organization, sorted by `score` descending.
+  - Supports `?risk_band=` filter and pagination (`limit`, `offset`).
+
+### Formula & Weights (Specification v1):
+- **Vulnerability Component**:
+  - Critical CVE: +30.0 (subtotal capped at 30.0)
+  - High CVE: +15.0 (subtotal capped at 30.0)
+  - Medium CVE: +5.0 (subtotal capped at 15.0)
+  - Low CVE: +2.0 (subtotal capped at 5.0)
+  - Maximum vulnerability subtotal: 80.0
+- **Incident Alert Component**:
+  - Open `brute_force`: +20.0
+  - Open `suspicious_login`: +15.0
+  - Open `port_scan`: +10.0
+- **Exposure Component**:
+  - &ge;10 open ports in the latest `services` scan result: +10.0 (otherwise 0.0)
+- **Aggregation**:
+  - `total_score = min(100.0, max(0.0, vuln_score + alert_score + exposure_score))`
+- **Bands**:
+  - 0 – 24: `Low`
+  - 25 – 49: `Medium`
+  - 50 – 74: `High`
+  - 75 – 100: `Critical`
+
+### Persistence & Storage:
+- `RiskScore.factor_breakdown` is serialized to a JSON string with `json.dumps(dict)` in `Column(Text)`.
+- Recalculation maintains current state via upsert logic ordered by `updated_at`.
+- Open alerts on the target device with unassigned risk scores are backfilled with the device's score.
+
+### Lifecycle Triggers:
+1. Vulnerability ingestion in `vulnerability_service.py` calls `calculate_device_risk()`.
+2. Alert generation in `detection_service.py` calls `calculate_device_risk()` for the target device.
+3. Alert status transitions to `Resolved` or `False Positive` in `alerts.py` trigger recalculation.
+
+### Frontend Integration:
+- Created `frontend/src/services/riskService.ts` with typed methods `getRiskScores()` and `getDeviceRisk()`.
+- Implemented `frontend/src/pages/RiskManagement.tsx`:
+  - KPI summary cards (Average risk, Critical/High/Medium/Low counts).
+  - Search and filter by risk band.
+  - Responsive table with risk score bars and badges.
+  - Interactive modal visualizing detailed factor breakdown across vulnerabilities, alerts, and exposure.
+- Updated `frontend/src/pages/Devices.tsx`:
+  - Added live quantified device risk card in the Device Details modal.
+
+### Test Evidence:
+- `tests/test_risk_scores.py`: 14 passed, 0 failures.
+- Full regression suite: 231 passed, 0 failures in 55.58s across all phases.
+- Frontend build: `npm run build` succeeded with 0 TypeScript/build errors.
 
 ---
 

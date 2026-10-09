@@ -6,6 +6,7 @@ Permission matrix (user-roles.md):
 - Write devices: Administrator, Security Analyst
 """
 
+import json
 import uuid
 from typing import Annotated, List, Optional
 
@@ -18,6 +19,7 @@ from app.core.deps import get_any_authenticated_user, get_current_analyst_or_adm
 from app.models.device import Device
 from app.models.scan import CVE, Vulnerability
 from app.models.user import User
+from app.services.risk_service import get_latest_device_risk
 
 router = APIRouter()
 
@@ -96,6 +98,52 @@ async def get_device(
         "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
         "created_at": device.created_at.isoformat() if device.created_at else None,
         "updated_at": device.updated_at.isoformat() if device.updated_at else None,
+    }
+
+
+@router.get("/{device_id}/risk", summary="Get device risk score")
+async def get_device_risk(
+    device_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_any_authenticated_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Retrieve the latest dynamic risk score and factor breakdown for a device."""
+    device = db.query(Device).filter(
+        Device.id == device_id,
+        Device.organization_id == current_user.organization_id,
+        Device.deleted_at.is_(None),
+    ).first()
+
+    if device is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND", "message": "Device not found.", "details": []}},
+        )
+
+    risk = get_latest_device_risk(db, device.id, current_user.organization_id)
+    if not risk:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND", "message": "Risk score not available for this device.", "details": []}},
+        )
+
+    try:
+        breakdown = json.loads(risk.factor_breakdown) if risk.factor_breakdown else {}
+    except Exception:
+        breakdown = {}
+
+    return {
+        "id": str(risk.id),
+        "organization_id": str(risk.organization_id),
+        "entity_type": risk.entity_type,
+        "entity_id": str(risk.entity_id),
+        "device_id": str(risk.entity_id),
+        "score": float(risk.score),
+        "risk_band": risk.risk_band,
+        "factor_breakdown": breakdown,
+        "formula_version": risk.formula_version,
+        "created_at": risk.created_at.isoformat() if risk.created_at else None,
+        "updated_at": risk.updated_at.isoformat() if risk.updated_at else None,
     }
 
 

@@ -1,16 +1,33 @@
 from fastapi import APIRouter
-from app.api.v1 import health, auth, users, agents, devices, scans, vulnerabilities, logs, alerts, threat_intelligence, reports, ai, settings, dashboard
+from app.api.v1 import (
+    health,
+    auth,
+    users,
+    agents,
+    devices,
+    scans,
+    vulnerabilities,
+    logs,
+    alerts,
+    threat_intelligence,
+    reports,
+    ai,
+    settings,
+    dashboard,
+    risk_scores,
+)
 
 router = APIRouter()
 
 # Health endpoints (always available)
 router.include_router(health.router, prefix="/health", tags=["Health"])
 
-# API group routers (placeholders for future phases)
+# API group routers
 router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 router.include_router(users.router, prefix="/users", tags=["Users"])
 router.include_router(agents.router, prefix="/agents", tags=["Agents"])
 router.include_router(devices.router, prefix="/devices", tags=["Devices"])
+router.include_router(risk_scores.router, prefix="/risk-scores", tags=["Risk Scores"])
 router.include_router(scans.router, prefix="/scans", tags=["Scans"])
 router.include_router(vulnerabilities.router, prefix="/vulnerabilities", tags=["Vulnerabilities"])
 router.include_router(logs.router, prefix="/logs", tags=["Logs"])

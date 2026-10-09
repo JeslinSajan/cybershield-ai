@@ -17,6 +17,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.alert import Alert
+from app.models.device import Device
 from app.models.log import Log
 from app.models.scan import ScanResult
 from app.models.system import AuditLog, Notification
@@ -122,6 +123,31 @@ def create_alert(
 
     db.flush()
     logger.info(f"Created {severity} alert '{alert_type}' (ID: {alert.id}) for org {organization_id}")
+
+    # Recalculate device risk score if alert is associated with a device
+    target_dev_id = alert.device_id
+    if not target_dev_id and source_ip:
+        matched_dev = (
+            db.query(Device)
+            .filter(
+                Device.organization_id == organization_id,
+                Device.ip_address == source_ip,
+                Device.deleted_at.is_(None),
+            )
+            .first()
+        )
+        if matched_dev:
+            target_dev_id = matched_dev.id
+            alert.device_id = matched_dev.id
+            db.flush()
+
+    if target_dev_id:
+        try:
+            from app.services.risk_service import calculate_device_risk
+            calculate_device_risk(db, target_dev_id, organization_id)
+        except Exception as e:
+            logger.error(f"Error recalculating risk for device {target_dev_id} on alert creation: {e}")
+
     return alert
 
 

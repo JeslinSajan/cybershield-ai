@@ -9,6 +9,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { devicesService, Device, DeviceVulnerability } from '../services/devicesService';
 import { agentsService, Agent } from '../services/agentsService';
 import { scansService } from '../services/scansService';
+import { riskService, DeviceRiskScore } from '../services/riskService';
 import { useAuth } from '../contexts/AuthContext';
 
 export function Devices() {
@@ -23,6 +24,8 @@ export function Devices() {
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [deviceVulns, setDeviceVulns] = useState<DeviceVulnerability[]>([]);
   const [isLoadingVulns, setIsLoadingVulns] = useState<boolean>(false);
+  const [deviceRisk, setDeviceRisk] = useState<DeviceRiskScore | null>(null);
+  const [isLoadingRisk, setIsLoadingRisk] = useState<boolean>(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
 
   // Discovery Scan Modal State
@@ -55,13 +58,20 @@ export function Devices() {
     setSelectedDevice(device);
     setIsDetailModalOpen(true);
     setIsLoadingVulns(true);
+    setIsLoadingRisk(true);
     try {
-      const vulns = await devicesService.getDeviceVulnerabilities(device.id);
-      setDeviceVulns(vulns);
+      const [vulns, risk] = await Promise.allSettled([
+        devicesService.getDeviceVulnerabilities(device.id),
+        riskService.getDeviceRisk(device.id),
+      ]);
+      setDeviceVulns(vulns.status === 'fulfilled' ? vulns.value : []);
+      setDeviceRisk(risk.status === 'fulfilled' ? risk.value : null);
     } catch {
       setDeviceVulns([]);
+      setDeviceRisk(null);
     } finally {
       setIsLoadingVulns(false);
+      setIsLoadingRisk(false);
     }
   };
 
@@ -272,6 +282,24 @@ export function Devices() {
                   {selectedDevice.last_seen_at ? new Date(selectedDevice.last_seen_at).toLocaleString() : 'N/A'}
                 </p>
               </div>
+            </div>
+
+            {/* Dynamic Risk Score Assessment */}
+            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-[10px] uppercase font-semibold">Quantified Device Risk</p>
+                {isLoadingRisk ? (
+                  <span className="text-xs text-slate-500">Evaluating formula v1...</span>
+                ) : deviceRisk ? (
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xl font-bold font-mono text-slate-100">{deviceRisk.score}</span>
+                    <span className="text-xs text-slate-400">/ 100</span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-500">Not scored yet</span>
+                )}
+              </div>
+              {deviceRisk && <Badge severity={deviceRisk.risk_band}>{deviceRisk.risk_band} Risk</Badge>}
             </div>
 
             {/* Vulnerabilities Associated with Device */}

@@ -1,6 +1,6 @@
 # Phase 17 — Risk Scoring
 
-**Status:** Not Started  
+**Status:** Done  
 *(Change to "Done" when this phase is complete)*
 
 ---
