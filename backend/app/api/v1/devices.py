@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_any_authenticated_user, get_current_analyst_or_admin
 from app.models.device import Device
+from app.models.scan import CVE, Vulnerability
 from app.models.user import User
 
 router = APIRouter()
@@ -96,6 +97,57 @@ async def get_device(
         "created_at": device.created_at.isoformat() if device.created_at else None,
         "updated_at": device.updated_at.isoformat() if device.updated_at else None,
     }
+
+
+@router.get("/{device_id}/vulnerabilities", summary="Get device vulnerabilities")
+async def get_device_vulnerabilities(
+    device_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_any_authenticated_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Retrieve all vulnerabilities discovered for a specific device."""
+    device = db.query(Device).filter(
+        Device.id == device_id,
+        Device.organization_id == current_user.organization_id,
+        Device.deleted_at.is_(None),
+    ).first()
+
+    if device is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND", "message": "Device not found.", "details": []}},
+        )
+
+    records = (
+        db.query(Vulnerability, CVE.cve_id.label("cve_code"))
+        .outerjoin(CVE, Vulnerability.cve_id == CVE.id)
+        .filter(
+            Vulnerability.device_id == device.id,
+            Vulnerability.organization_id == current_user.organization_id,
+        )
+        .order_by(Vulnerability.created_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": str(v.id),
+            "organization_id": str(v.organization_id),
+            "device_id": str(v.device_id),
+            "scan_id": str(v.scan_id) if v.scan_id else None,
+            "cve_id": str(v.cve_id) if v.cve_id else None,
+            "cve_code": cve_code,
+            "severity": v.severity,
+            "score": float(v.score) if v.score is not None else None,
+            "description": v.description,
+            "summary": v.description,
+            "recommendation": v.recommendation,
+            "status": v.status,
+            "created_at": v.created_at.isoformat() if v.created_at else None,
+            "updated_at": v.updated_at.isoformat() if v.updated_at else None,
+        }
+        for v, cve_code in records
+    ]
 
 
 @router.post("/", summary="Create/update device")

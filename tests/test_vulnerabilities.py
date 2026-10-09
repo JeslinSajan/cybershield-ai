@@ -389,3 +389,262 @@ class TestUploadResultVulnerabilityIntegration:
         vsftpd_vuln = vulns[0]
         assert vsftpd_vuln.severity == "Critical"
         assert "Backdoor" in vsftpd_vuln.description
+
+
+class TestVulnerabilityEndpoints:
+    @pytest.fixture
+    def vuln_endpoint_setup(self, db_session):
+        from app.core.security import create_access_token, hash_password
+        from app.core.seed import CANONICAL_ROLES
+
+        uid = uuid.uuid4().hex[:8]
+        org1 = Organization(name=f"VulnEpOrg1-{uid}", slug=f"vuln-ep-org-1-{uid}")
+        org2 = Organization(name=f"VulnEpOrg2-{uid}", slug=f"vuln-ep-org-2-{uid}")
+        db_session.add_all([org1, org2])
+        db_session.flush()
+
+        roles = {}
+        for name, desc in CANONICAL_ROLES:
+            existing = db_session.query(Role).filter(Role.name == name).first()
+            if existing:
+                roles[name] = existing
+            else:
+                r = Role(name=name, description=desc)
+                db_session.add(r)
+                db_session.flush()
+                roles[name] = r
+
+        # Users for Org1: Admin, Analyst, Viewer
+        admin_org1 = User(
+            organization_id=org1.id,
+            role_id=roles["Administrator"].id,
+            email=f"admin1-{uid}@test.com",
+            username=f"admin1-{uid}",
+            password_hash=hash_password("Pass123!"),
+            is_active=True,
+        )
+        analyst_org1 = User(
+            organization_id=org1.id,
+            role_id=roles["Security Analyst"].id,
+            email=f"analyst1-{uid}@test.com",
+            username=f"analyst1-{uid}",
+            password_hash=hash_password("Pass123!"),
+            is_active=True,
+        )
+        viewer_org1 = User(
+            organization_id=org1.id,
+            role_id=roles["Viewer"].id,
+            email=f"viewer1-{uid}@test.com",
+            username=f"viewer1-{uid}",
+            password_hash=hash_password("Pass123!"),
+            is_active=True,
+        )
+        # User for Org2: Viewer
+        viewer_org2 = User(
+            organization_id=org2.id,
+            role_id=roles["Viewer"].id,
+            email=f"viewer2-{uid}@test.com",
+            username=f"viewer2-{uid}",
+            password_hash=hash_password("Pass123!"),
+            is_active=True,
+        )
+        db_session.add_all([admin_org1, analyst_org1, viewer_org1, viewer_org2])
+        db_session.flush()
+
+        # Seed CVEs
+        if db_session.query(CVE).count() < 10:
+            seed_cves(db=db_session, organization_id=org1.id)
+
+        cve1 = db_session.query(CVE).filter(CVE.cve_id == "CVE-2021-41773").first()
+        cve2 = db_session.query(CVE).filter(CVE.cve_id == "CVE-2018-15473").first()
+
+        # Create device in Org1
+        dev1 = Device(
+            organization_id=org1.id,
+            ip_address="192.168.1.55",
+            hostname="server-55",
+            status="online",
+        )
+        db_session.add(dev1)
+        db_session.flush()
+
+        # Create 2 vulnerabilities in Org1
+        vuln1 = Vulnerability(
+            organization_id=org1.id,
+            device_id=dev1.id,
+            cve_id=cve1.id if cve1 else None,
+            severity="Critical",
+            score=9.8,
+            description="Apache Path Traversal",
+            recommendation="Update Apache",
+            status="open",
+        )
+        vuln2 = Vulnerability(
+            organization_id=org1.id,
+            device_id=dev1.id,
+            cve_id=cve2.id if cve2 else None,
+            severity="Medium",
+            score=5.3,
+            description="OpenSSH User Enum",
+            recommendation="Upgrade OpenSSH",
+            status="resolved",
+        )
+        db_session.add_all([vuln1, vuln2])
+        db_session.commit()
+
+        # Tokens
+        token_admin = create_access_token(str(admin_org1.id), "Administrator", str(org1.id))
+        token_analyst = create_access_token(str(analyst_org1.id), "Security Analyst", str(org1.id))
+        token_viewer = create_access_token(str(viewer_org1.id), "Viewer", str(org1.id))
+        token_org2 = create_access_token(str(viewer_org2.id), "Viewer", str(org2.id))
+
+        return {
+            "org1": org1,
+            "org2": org2,
+            "dev1": dev1,
+            "vuln1": vuln1,
+            "vuln2": vuln2,
+            "tokens": {
+                "admin": token_admin,
+                "analyst": token_analyst,
+                "viewer": token_viewer,
+                "org2": token_org2,
+            },
+        }
+
+    def test_all_three_roles_can_list_vulnerabilities(self, vuln_endpoint_setup):
+        tokens = vuln_endpoint_setup["tokens"]
+        for role_name in ("admin", "analyst", "viewer"):
+            resp = client.get(
+                "/api/v1/vulnerabilities/",
+                headers={"Authorization": f"Bearer {tokens[role_name]}"},
+            )
+            assert resp.status_code == 200, f"Role {role_name} failed: {resp.text}"
+            data = resp.json()
+            assert isinstance(data, list)
+            assert len(data) >= 2
+
+    def test_unauthenticated_request_returns_401(self):
+        resp = client.get("/api/v1/vulnerabilities/")
+        assert resp.status_code == 401
+
+    def test_list_vulnerabilities_filters(self, vuln_endpoint_setup):
+        token = vuln_endpoint_setup["tokens"]["viewer"]
+        dev_id = vuln_endpoint_setup["dev1"].id
+
+        # Filter by severity
+        resp_crit = client.get(
+            "/api/v1/vulnerabilities/?severity=Critical",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp_crit.status_code == 200
+        for item in resp_crit.json():
+            assert item["severity"] == "Critical"
+
+        # Filter by status
+        resp_open = client.get(
+            "/api/v1/vulnerabilities/?status=open",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp_open.status_code == 200
+        for item in resp_open.json():
+            assert item["status"] == "open"
+
+        # Filter by device_id
+        resp_dev = client.get(
+            f"/api/v1/vulnerabilities/?device_id={dev_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp_dev.status_code == 200
+        assert len(resp_dev.json()) >= 2
+        for item in resp_dev.json():
+            assert item["device_id"] == str(dev_id)
+
+        # Pagination: limit=1
+        resp_page = client.get(
+            "/api/v1/vulnerabilities/?limit=1&offset=0",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp_page.status_code == 200
+        assert len(resp_page.json()) == 1
+
+    def test_get_vulnerability_by_id(self, vuln_endpoint_setup):
+        token = vuln_endpoint_setup["tokens"]["analyst"]
+        vuln1 = vuln_endpoint_setup["vuln1"]
+
+        # 200 Success
+        resp = client.get(
+            f"/api/v1/vulnerabilities/{vuln1.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == str(vuln1.id)
+        assert data["severity"] == "Critical"
+        assert data["score"] == 9.8
+        assert data["cve_code"] == "CVE-2021-41773"
+        assert data["cve_details"] is not None
+        assert data["cve_details"]["cve_id"] == "CVE-2021-41773"
+
+        # 404 Nonexistent
+        non_id = uuid.uuid4()
+        resp_404 = client.get(
+            f"/api/v1/vulnerabilities/{non_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp_404.status_code == 404
+        assert resp_404.json()["error"]["code"] == "NOT_FOUND"
+
+    def test_get_device_vulnerabilities_endpoint(self, vuln_endpoint_setup):
+        token = vuln_endpoint_setup["tokens"]["viewer"]
+        dev_id = vuln_endpoint_setup["dev1"].id
+
+        resp = client.get(
+            f"/api/v1/devices/{dev_id}/vulnerabilities",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) >= 2
+        for item in data:
+            assert item["device_id"] == str(dev_id)
+            assert "severity" in item
+            assert "description" in item
+
+        # 404 for nonexistent device
+        resp_404 = client.get(
+            f"/api/v1/devices/{uuid.uuid4()}/vulnerabilities",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp_404.status_code == 404
+        assert resp_404.json()["error"]["code"] == "NOT_FOUND"
+
+    def test_cross_organization_vulnerability_isolation(self, vuln_endpoint_setup):
+        token_org2 = vuln_endpoint_setup["tokens"]["org2"]
+        vuln1 = vuln_endpoint_setup["vuln1"]
+        dev1 = vuln_endpoint_setup["dev1"]
+
+        # Org2 listing vulnerabilities should be empty
+        resp_list = client.get(
+            "/api/v1/vulnerabilities/",
+            headers={"Authorization": f"Bearer {token_org2}"},
+        )
+        assert resp_list.status_code == 200
+        assert len(resp_list.json()) == 0
+
+        # Org2 getting Org1's vulnerability ID returns 404
+        resp_get = client.get(
+            f"/api/v1/vulnerabilities/{vuln1.id}",
+            headers={"Authorization": f"Bearer {token_org2}"},
+        )
+        assert resp_get.status_code == 404
+        assert resp_get.json()["error"]["code"] == "NOT_FOUND"
+
+        # Org2 getting Org1's device vulnerabilities returns 404
+        resp_dev = client.get(
+            f"/api/v1/devices/{dev1.id}/vulnerabilities",
+            headers={"Authorization": f"Bearer {token_org2}"},
+        )
+        assert resp_dev.status_code == 404
+        assert resp_dev.json()["error"]["code"] == "NOT_FOUND"
+
