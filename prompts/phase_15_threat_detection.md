@@ -1,6 +1,6 @@
 # Phase 15 — Threat Detection
 
-**Status:** Not Started  
+**Status:** Done  
 *(Change to "Done" when this phase is complete)*
 
 ---

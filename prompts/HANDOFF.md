@@ -360,9 +360,40 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 15 — Threat Detection — ⬜ Not Started
+## Phase 15 — Threat Detection — COMPLETED 2026-10-09
 
-*Append after Phase 15.*
+### Database & Schema Verification:
+- `alerts` table: `id` (UUID PK), `organization_id` (UUID FK), `agent_id` (UUID FK nullable), `device_id` (UUID FK nullable), `alert_type` (String(40)), `severity` (String(15)), `status` (String(25), default 'Open'), `description` (Text), `risk_score` (Numeric(5, 2)), `triggered_at` (DateTime(timezone=True)), `created_at`, `updated_at`.
+- `audit_logs` table: `id`, `organization_id`, `actor_type` ('system'), `actor_id` (None), `action` ('alert_created'), `target_type` ('alerts'), `target_id` (alert.id), `details` (JSONB), `created_at`.
+- `notifications` table: `id`, `organization_id`, `user_id` (User FK), `alert_id` (Alert FK), `notification_type` ('alert'), `channel` ('dashboard'), `title`, `body`, `is_read` (Boolean, default False), `created_at`, `updated_at`.
+
+### Detection Rules & Provisional Risk Scores:
+- **Rule 1: Brute Force (`brute_force`)**:
+  - Condition: 5+ `login_failure` logs from same `source_ip` within 10 minutes.
+  - Severity: `High`. Provisional `risk_score`: 40.0.
+- **Rule 2: Port Scan (`port_scan`)**:
+  - Condition: scan result indicates 10+ open ports on a device.
+  - Severity: `Medium`. Provisional `risk_score`: 20.0.
+- **Rule 3: Suspicious Login (`suspicious_login`)**:
+  - Condition: `login_success` from an IP with 3+ `login_failure` logs in the last hour.
+  - Severity: `High`. Provisional `risk_score`: 40.0.
+- **Provisional risk score note**: High=40, Medium=20, Low=10 (to be backfilled / recalculated dynamically in Phase 17).
+
+### Alert Deduplication:
+- Suppressed when an alert with the same `organization_id`, `alert_type`, matching `agent_id`/`device_id`, and `source_ip` in `description` already has status in `['Open', 'Acknowledged']` created in the last 1 hour.
+
+### User Notification Dispatch:
+- Automatically creates `Notification` rows for all active, non-deleted users in the organization for High and Critical severity alerts.
+
+### Ingestion Hooks:
+- Hooked synchronously in `backend/app/api/v1/agents.py`:
+  - `POST /api/v1/agents/logs` calls `process_log_detections()`.
+  - `POST /api/v1/agents/results` calls `process_scan_detections()`.
+  - Both protected with exception handling to avoid disrupting telemetry ingestion.
+
+### Test Evidence:
+- `tests/test_detection.py`: 13 passed (brute force rule, port scan rule, suspicious login rule, deduplication, audit logs, notifications, tenant isolation, ingestion hooks).
+- Full regression suite: 194 passed, 0 failures. Zero regressions.
 
 ---
 
