@@ -1,78 +1,121 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-
-interface HealthResponse {
-  status: string;
-}
+import { healthService } from '../../services/healthService';
 
 export function TopBar() {
-  const [healthStatus, setHealthStatus] = useState<string>('Checking...');
+  const [appHealth, setAppHealth] = useState<'checking' | 'healthy' | 'error'>('checking');
+  const [dbHealth, setDbHealth] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkHealth = async () => {
+    let isMounted = true;
+
+    const checkStatuses = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/health`);
-        const data: HealthResponse = await response.json();
-        setHealthStatus(data.status === 'healthy' ? 'Connected' : 'Error');
-      } catch (error) {
-        setHealthStatus('Disconnected');
+        const appRes = await healthService.checkHealth();
+        if (isMounted) {
+          setAppHealth(appRes.status === 'healthy' ? 'healthy' : 'error');
+        }
+      } catch {
+        if (isMounted) setAppHealth('error');
+      }
+
+      try {
+        const dbRes = await healthService.checkDatabaseHealth();
+        if (isMounted) {
+          setDbHealth(dbRes.database === 'connected' ? 'connected' : 'disconnected');
+        }
+      } catch {
+        if (isMounted) setDbHealth('disconnected');
       }
     };
 
-    checkHealth();
-    const interval = setInterval(checkHealth, 30000); // Check every 30 seconds
-    return () => clearInterval(interval);
+    checkStatuses();
+    const interval = setInterval(checkStatuses, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
   return (
-    <header className="h-16 bg-soc-panel border-b border-soc-panelLight flex items-center justify-between px-6">
+    <header className="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 z-10 select-none">
+      {/* Search Input / Quick Filter */}
       <div className="flex items-center space-x-4">
         <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
           <input
             type="text"
-            placeholder="Search..."
-            className="bg-soc-panelLight border border-soc-panelLight rounded-md px-4 py-2 text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-soc-accent w-64"
+            placeholder="Global search (IP, hostname, CVE, log event)..."
+            className="bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 w-80 transition-colors"
           />
         </div>
       </div>
 
-      <div className="flex items-center space-x-4">
-        {/* Backend Health Status */}
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${healthStatus === 'Connected' ? 'bg-soc-success' : 'bg-soc-danger'}`} />
-          <span className="text-xs text-gray-400">
-            Backend: {healthStatus}
-          </span>
+      {/* Right side items: Live Status, Profile, Logout */}
+      <div className="flex items-center space-x-5">
+        {/* Backend & DB Health Telemetry */}
+        <div className="flex items-center space-x-3 bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-1.5 text-xs">
+          <div className="flex items-center space-x-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                appHealth === 'healthy'
+                  ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                  : appHealth === 'checking'
+                  ? 'bg-amber-400 animate-pulse'
+                  : 'bg-rose-500'
+              }`}
+            />
+            <span className="text-slate-400 font-mono text-[11px]">API: {appHealth}</span>
+          </div>
+
+          <span className="text-slate-700">|</span>
+
+          <div className="flex items-center space-x-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                dbHealth === 'connected'
+                  ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                  : dbHealth === 'checking'
+                  ? 'bg-amber-400 animate-pulse'
+                  : 'bg-rose-500'
+              }`}
+            />
+            <span className="text-slate-400 font-mono text-[11px]">DB: {dbHealth}</span>
+          </div>
         </div>
 
-        {/* Notifications */}
-        <button className="relative p-2 text-gray-400 hover:text-white transition-colors">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
-          <span className="absolute top-1 right-1 w-2 h-2 bg-soc-danger rounded-full"></span>
-        </button>
-
-        {/* User Profile */}
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-soc-accent rounded-full flex items-center justify-center">
-            <span className="text-sm font-semibold text-white">{user?.username?.[0]?.toUpperCase() || 'A'}</span>
+        {/* User Profile Badge & Logout */}
+        <div className="flex items-center space-x-3 border-l border-slate-800 pl-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center font-bold text-white text-xs shadow-md shadow-cyan-950/40">
+              {user?.username?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
+            </div>
+            <div className="text-left hidden sm:block">
+              <p className="text-xs font-semibold text-slate-200 leading-tight">
+                {user?.username || user?.email?.split('@')[0] || 'User'}
+              </p>
+              <p className="text-[10px] text-cyan-400/90 font-mono leading-tight">
+                {user?.role || 'Viewer'}
+              </p>
+            </div>
           </div>
-          <span className="text-sm text-gray-300">{user?.username || 'Admin'}</span>
-          <button 
+
+          <button
             onClick={handleLogout}
-            className="ml-2 text-gray-400 hover:text-white transition-colors"
-            title="Logout"
+            title="Secure Sign Out"
+            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

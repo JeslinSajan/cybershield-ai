@@ -397,9 +397,45 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 16 — Alert Management — ⬜ Not Started
+## Phase 16 — Alert Management — ✅ COMPLETED 2026-10-09
 
-*Append after Phase 16.*
+### Endpoints Implemented:
+- `GET /api/v1/alerts/summary` (all roles, registered BEFORE `/{alert_id}`):
+  - Returns counts: `{open, acknowledged, investigating, resolved, false_positive, critical, high, medium, low}`.
+- `GET /api/v1/alerts/` (all roles):
+  - Filters by `status`, `severity`, `alert_type`, with `limit` and `offset` pagination.
+  - Multi-tenant isolation by caller's `organization_id`.
+- `GET /api/v1/alerts/{alert_id}` (all roles):
+  - Detail view including embedded `history: [...]` (`AlertEvent` transition list).
+- `GET /api/v1/alerts/{alert_id}/history` (all roles):
+  - Standalone transition timeline ordered by `changed_at` descending.
+- `PATCH /api/v1/alerts/{alert_id}` (`get_current_analyst_or_admin`, Viewer gets 403 `FORBIDDEN`):
+  - Transitions alert lifecycle status with optional reason.
+
+### Status Transition Lifecycle:
+- Enforced canonical transitions:
+  - `Open` → `Acknowledged`, `Investigating`, `False Positive`
+  - `Acknowledged` → `Investigating`, `Resolved`, `False Positive`
+  - `Investigating` → `Resolved`, `False Positive`
+- Disallowed transitions return HTTP 400 with standard error envelope `{"error": {"code": "VALIDATION_ERROR", ...}}`.
+
+### AlertEvent and AuditLog Persistence:
+- Synchronously creates an `AlertEvent` record: `organization_id`, `alert_id`, `actor_user_id`, `from_status`, `to_status`, `reason`, `changed_at`.
+- Synchronously creates an `AuditLog` record: `actor_type="user"`, `actor_id=user.id`, `action="alert_status_changed"`, `target_type="alerts"`, `target_id=alert.id`.
+
+### Frontend Integration & Verification:
+- Created `frontend/src/services/alertsService.ts` with complete typed API methods.
+- Updated `frontend/src/pages/Alerts.tsx`:
+  - Live summary stat cards (`open`, `acknowledged`, `investigating`, `resolved`).
+  - Search and severity/status filter controls.
+  - Responsive alerts table with live backend data and empty/error states.
+  - Interactive Triage modal allowing Analysts and Admins to transition alert status, enter triage notes, and inspect audit timeline history.
+  - Role-aware control enablement (viewers see disabled triage triggers).
+
+### Test Evidence:
+- `tests/test_alerts.py`: 23 passed, 0 failures.
+- Full test suite: 217 passed, 0 failures in 60.94s across all project phases.
+- Frontend build: `npm run build` succeeded with 0 TypeScript/build errors.
 
 ---
 
