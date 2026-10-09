@@ -261,6 +261,44 @@ Rules below.
   - After a successful result upload, the task status is automatically updated to COMPLETED and completed_at is set.
   - Idempotency check happens before task state validation to allow retry of uploads even after the task is marked COMPLETED.
 
+### POST /agents/logs
+
+- Auth requirement: Agent credential required (Bearer token)
+- Authorization: Enrolled, active Agent
+- Request schema:
+
+```json
+{
+  "logs": [
+    {
+      "source": "auth.log",
+      "event_type": "login_failure",
+      "severity": "medium",
+      "message": "Failed password for root from 192.168.1.100 port 22",
+      "source_ip": "192.168.1.100",
+      "username": "root",
+      "timestamp": "2026-10-09T18:00:00Z"
+    }
+  ]
+}
+```
+
+- Response schema:
+
+```json
+{
+  "ingested_count": 1,
+  "log_ids": ["uuid"]
+}
+```
+
+- Success status: `201 Created`
+- Error statuses: `401 Unauthorized`, `403 Forbidden`, `422 Unprocessable Entity`
+- Notes:
+  - This is the Agent ingestion path for security and authentication event logs (FR-8.1).
+  - Severities are mapped automatically if omitted: `login_failure` → `medium`, `login_success` → `low`, other → `info`.
+  - The endpoint automatically associates the agent's `organization_id` and links known devices by IP or agent assignment.
+
 ### POST /agents/{agent_id}/revoke
 
 - Auth requirement: JWT required

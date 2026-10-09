@@ -14,7 +14,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -29,6 +29,7 @@ from app.core.deps import (
 from app.core.enrollment_store import add_token, consume_token
 from app.models.agent import Agent, AgentCredential, AgentHeartbeat
 from app.models.device import Device, DeviceInterface
+from app.models.log import Log
 from app.models.organization import Organization
 from app.models.scan import Scan, ScanResult
 from app.models.system import AuditLog
@@ -111,6 +112,20 @@ class ResultUpload(BaseModel):
     upload_id: Optional[str] = Field(None, max_length=36)
     result_type: str
     raw_payload: dict
+
+
+class LogEntryItem(BaseModel):
+    source: str = Field(..., min_length=1, max_length=80)
+    event_type: str = Field(..., min_length=1, max_length=80)
+    severity: Optional[str] = Field(None, max_length=20)
+    message: str = Field(..., min_length=1)
+    source_ip: Optional[str] = Field(None, max_length=45)
+    username: Optional[str] = Field(None, max_length=120)
+    timestamp: Optional[datetime] = None
+
+
+class LogIngestRequest(BaseModel):
+    logs: List[LogEntryItem] = Field(..., min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -509,6 +524,84 @@ async def upload_result(
         "result_type": result.result_type,
         "created_at": result.created_at.isoformat(),
         "upload_id": result.upload_id
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /agents/logs  (Agent credential)
+# ---------------------------------------------------------------------------
+
+@router.post("/logs", status_code=201, summary="Ingest agent logs")
+async def ingest_agent_logs(
+    body: Union[LogIngestRequest, List[LogEntryItem]],
+    agent: Annotated[Agent, Depends(require_agent_credential)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Ingest security event logs from an enrolled agent. FR-8.1."""
+    now = datetime.now(timezone.utc)
+    log_rows = []
+
+    def _resolve_severity(event_type: str, explicit_severity: Optional[str]) -> str:
+        if explicit_severity and explicit_severity.lower() in ("critical", "high", "medium", "low", "info", "warning"):
+            return explicit_severity.lower()
+        evt = event_type.lower()
+        if evt == "login_failure":
+            return "medium"
+        elif evt == "login_success":
+            return "low"
+        return "info"
+
+    linked_device = db.query(Device).filter(
+        Device.organization_id == agent.organization_id,
+        Device.agent_id == agent.id,
+        Device.deleted_at.is_(None),
+    ).first()
+
+    entries = body.logs if isinstance(body, LogIngestRequest) else body
+    if not entries:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": {"code": "VALIDATION_ERROR", "message": "At least one log entry is required.", "details": []}},
+        )
+
+    for item in entries:
+        entry_time = item.timestamp or now
+        severity = _resolve_severity(item.event_type, item.severity)
+
+        device_id = None
+        if linked_device:
+            device_id = linked_device.id
+        elif item.source_ip:
+            matched_dev = db.query(Device).filter(
+                Device.organization_id == agent.organization_id,
+                Device.ip_address == item.source_ip,
+                Device.deleted_at.is_(None),
+            ).first()
+            if matched_dev:
+                device_id = matched_dev.id
+
+        log_entry = Log(
+            organization_id=agent.organization_id,
+            agent_id=agent.id,
+            device_id=device_id,
+            source=item.source,
+            event_type=item.event_type,
+            severity=severity,
+            message=item.message,
+            source_ip=item.source_ip,
+            username=item.username,
+            timestamp=entry_time,
+        )
+        db.add(log_entry)
+        log_rows.append(log_entry)
+
+    db.commit()
+    for row in log_rows:
+        db.refresh(row)
+
+    return {
+        "ingested_count": len(log_rows),
+        "log_ids": [str(row.id) for row in log_rows],
     }
 
 
