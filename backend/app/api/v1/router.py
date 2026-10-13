@@ -15,6 +15,7 @@ from app.api.v1 import (
     settings,
     dashboard,
     risk_scores,
+    notifications,
 )
 
 router = APIRouter()
@@ -36,4 +37,6 @@ router.include_router(threat_intelligence.router, prefix="/threat-intelligence",
 router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 router.include_router(ai.router, prefix="/ai", tags=["AI"])
 router.include_router(settings.router, prefix="/settings", tags=["Settings"])
+router.include_router(settings.audit_router, prefix="/audit-logs", tags=["Audit Logs"])
 router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
+router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])

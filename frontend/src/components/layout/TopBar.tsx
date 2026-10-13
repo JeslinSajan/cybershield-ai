@@ -1,13 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { healthService } from '../../services/healthService';
+import { notificationsService, NotificationItem } from '../../services/notificationsService';
 
 export function TopBar() {
   const [appHealth, setAppHealth] = useState<'checking' | 'healthy' | 'error'>('checking');
   const [dbHealth, setDbHealth] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Notifications State
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState<boolean>(false);
+  const notifDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -32,17 +39,81 @@ export function TopBar() {
       }
     };
 
+    const fetchNotificationsData = async () => {
+      try {
+        const [count, list] = await Promise.all([
+          notificationsService.getUnreadCount(),
+          notificationsService.listNotifications({ limit: 10 }),
+        ]);
+        if (isMounted) {
+          setUnreadCount(count);
+          setNotifications(list);
+        }
+      } catch {
+        // silent fallback
+      }
+    };
+
     checkStatuses();
-    const interval = setInterval(checkStatuses, 30000);
+    fetchNotificationsData();
+
+    const interval = setInterval(() => {
+      checkStatuses();
+      fetchNotificationsData();
+    }, 30000);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
   }, []);
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(e.target as Node)) {
+        setIsNotifOpen(false);
+      }
+    };
+    if (isNotifOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isNotifOpen]);
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationsService.markAllRead();
+      setUnreadCount(0);
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleNotificationClick = async (notif: NotificationItem) => {
+    if (!notif.is_read) {
+      try {
+        await notificationsService.markRead(notif.id);
+        setUnreadCount((c) => Math.max(0, c - 1));
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n))
+        );
+      } catch {
+        // ignore
+      }
+    }
+    setIsNotifOpen(false);
+    if (notif.alert_id) {
+      navigate('/alerts');
+    }
   };
 
   return (
@@ -63,8 +134,8 @@ export function TopBar() {
         </div>
       </div>
 
-      {/* Right side items: Live Status, Profile, Logout */}
-      <div className="flex items-center space-x-5">
+      {/* Right side items: Telemetry, Notifications Bell, Profile, Logout */}
+      <div className="flex items-center space-x-4">
         {/* Backend & DB Health Telemetry */}
         <div className="flex items-center space-x-3 bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-1.5 text-xs">
           <div className="flex items-center space-x-1.5">
@@ -94,6 +165,76 @@ export function TopBar() {
             />
             <span className="text-slate-400 font-mono text-[11px]">DB: {dbHealth}</span>
           </div>
+        </div>
+
+        {/* Notifications Bell Dropdown */}
+        <div className="relative" ref={notifDropdownRef}>
+          <button
+            type="button"
+            onClick={() => setIsNotifOpen((prev) => !prev)}
+            className="relative p-2 rounded-lg bg-slate-950/60 border border-slate-800 text-slate-300 hover:text-cyan-400 hover:border-slate-700 transition-colors"
+            title="Incident Notifications"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white font-bold text-[9px] flex items-center justify-center animate-pulse">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* Floating Dropdown */}
+          {isNotifOpen && (
+            <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden">
+              <div className="p-3 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/80">
+                <span className="text-xs font-semibold text-slate-200">Incident Notifications</span>
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllRead}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-80 overflow-y-auto divide-y divide-slate-800/60">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-500">
+                    No active notifications
+                  </div>
+                ) : (
+                  notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n)}
+                      className={`p-3 cursor-pointer transition-colors hover:bg-slate-800/60 ${
+                        !n.is_read ? 'bg-cyan-950/20' : 'bg-transparent'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={`text-xs font-semibold ${!n.is_read ? 'text-cyan-300' : 'text-slate-300'}`}>
+                          {n.title}
+                        </span>
+                        {!n.is_read && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1 flex-shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">
+                        {n.body}
+                      </p>
+                      <span className="text-[9px] text-slate-500 font-mono mt-1 block">
+                        {new Date(n.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* User Profile Badge & Logout */}

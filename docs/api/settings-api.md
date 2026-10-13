@@ -42,7 +42,7 @@ This contract covers the system settings and threshold configuration required by
 - Success status: `200 OK`
 - Error statuses: `401 Unauthorized`, `403 Forbidden`
 
-### PATCH /settings/{key}
+### PUT /settings/{key} or PATCH /settings/{key}
 
 - Auth requirement: JWT required
 - Authorization: Administrator only
@@ -68,4 +68,37 @@ This contract covers the system settings and threshold configuration required by
 
 - Success status: `200 OK`
 - Error statuses: `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`
-- Notes: This is a system-configuration endpoint, not an Agent route. Value schema is flexible (`JSONB`) but the specific keys are the application settings, not security roles or users.
+- Notes: This is a system-configuration endpoint. Creates an AuditLog entry with action `setting_updated`.
+
+### GET /settings/audit-logs (Alias: GET /audit-logs/)
+
+- Auth requirement: JWT required
+- Authorization: Administrator only (FR-16.1)
+- Query parameters:
+  - `action` (optional string): filter by audit log action
+  - `actor_type` (optional string): filter by actor type (`user`, `agent`, `system`)
+  - `limit` (optional integer, default: 50, max: 200)
+  - `offset` (optional integer, default: 0)
+- Response schema:
+
+```json
+[
+  {
+    "id": "uuid",
+    "organization_id": "uuid",
+    "actor_type": "user",
+    "actor_id": "uuid",
+    "action": "setting_updated",
+    "target_type": "system_settings",
+    "target_id": "uuid",
+    "details": {
+      "key": "heartbeat_interval_seconds"
+    },
+    "created_at": "2026-10-13T20:00:00Z"
+  }
+]
+```
+
+- Success status: `200 OK`
+- Error statuses: `401 Unauthorized`, `403 Forbidden`
+

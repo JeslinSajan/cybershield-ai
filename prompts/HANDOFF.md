@@ -686,9 +686,51 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 21 — Frontend Integration — ⬜ Not Started
+## Phase 21 — Frontend Integration & Verification — ✅ COMPLETED 2026-10-13
 
-*Append after Phase 21.*
+### Architecture & Ground Truth:
+- **Frontend Pages (13/13 Complete):**
+  1. `Login` — POST `/auth/login`, stores JWT, redirects to `/`.
+  2. `Dashboard` — GET `/alerts/summary`, GET `/agents/`, recent alerts, auto-refreshes every 60s.
+  3. `Agents` — GET `/agents/`, status badges (ONLINE=green/OFFLINE=red/PENDING=yellow), heartbeat health, token generator (Admin), revoke button (Admin). Auto-refreshes every 30s.
+  4. `Devices` — GET `/devices/`, device details, vulnerability and risk badges, discovery scan triggering with warning dialog.
+  5. `Vulnerabilities` — GET `/vulnerabilities/`, severity/status filters, CVE details modal, "Investigate with AI" deep-linking.
+  6. `Alerts` — GET `/alerts/`, triage status filters, status change action (PATCH `/alerts/{id}`), timeline history, "Investigate with AI" button.
+  7. `Network Monitoring` — GET `/network-monitoring/`, interface statistics, traffic rates, active sessions.
+  8. `Logs` — GET `/logs/`, event type & source filters, timestamp formatting, log details modal.
+  9. `Threat Detection` — Suspicious activity detection rules (brute-force, port-scan, malware indicator).
+  10. `Threat Intelligence` — GET/POST/DELETE `/threat-intelligence/`, indicator type filtering, IOC table, creation form (Admin/Analyst).
+  11. `Reports` — GET/POST `/reports/`, report generation form (Admin/Analyst), archive table, PDF and CSV streaming downloads.
+  12. `AI Assistant` — POST `/ai/chat`, multi-turn investigation console, deep-linking with alert/vuln/risk tabs (Admin/Analyst only).
+  13. `Settings & Audit Trail` — 4-tab panel: User profile, User management, System Settings key-value store with live editor (Admin only), and Audit Logs compliance table (Admin only).
+- **Notifications TopBar Component (`frontend/src/components/layout/TopBar.tsx`):**
+  - Live notification bell with unread badge counter.
+  - Interactive dropdown popover with instant deep-linking to alert details.
+  - "Mark all as read" button (`POST /notifications/mark-all-read`).
+  - Automatic polling every 30s for real-time situational awareness.
+- **RBAC in UI:**
+  - Role loaded dynamically from `/auth/me` on login and restored on session refresh.
+  - Sidebar and routes hide restricted pages: Viewers cannot see `AI Security Assistant` or `Settings & Users`.
+  - Non-admins cannot see token generation or agent revocation buttons.
+
+### API Endpoints Implemented (`backend/app/api/v1/`):
+- `GET /api/v1/notifications/` — All roles (`get_any_authenticated_user`). Returns organizational notifications with `is_read` filtering and pagination.
+- `GET /api/v1/notifications/unread-count` — All roles. Returns `{ "unread_count": <int> }`.
+- `PATCH /api/v1/notifications/{id}/read` — All roles. Marks specific notification as read, 404 on missing or cross-org.
+- `POST /api/v1/notifications/mark-all-read` — All roles. Marks all unread notifications for user as read.
+- `GET /api/v1/settings/` — Admin only (`get_current_admin`). Lists key-value configuration.
+- `PUT /api/v1/settings/{key}` & `PATCH /api/v1/settings/{key}` — Admin only. Creates/updates setting and writes `AuditLog` (`action="setting_updated"`).
+- `GET /api/v1/settings/audit-logs` & `GET /api/v1/audit-logs/` — Admin only. Returns compliance audit log history with action and actor filtering.
+
+### Documentation:
+- Created `docs/api/notifications-api.md`.
+- Updated `docs/api/settings-api.md`.
+
+### Test Evidence:
+- `tests/test_notifications.py`: 10 passed, 0 failures.
+- `tests/test_settings.py`: 13 passed, 0 failures.
+- Full regression suite: **301 passed, 0 failures** in 90.99s across all phases.
+- Frontend build: `tsc && vite build` built `dist/` cleanly in 5.65s (0 errors).
 
 ---
 

@@ -8,15 +8,31 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAuth } from '../contexts/AuthContext';
 import { usersService, UserItem, CreateUserData } from '../services/usersService';
+import { settingsService, SystemSettingItem, AuditLogItem } from '../services/settingsService';
 
 export function Settings() {
   const { user, isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'users' | 'system'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'users' | 'system' | 'audit'>('profile');
 
   // User Management State (Admin only)
   const [users, setUsers] = useState<UserItem[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(false);
   const [userError, setUserError] = useState<string | null>(null);
+
+  // System Settings State (Admin only)
+  const [systemSettings, setSystemSettings] = useState<SystemSettingItem[]>([]);
+  const [isLoadingSettings, setIsLoadingSettings] = useState<boolean>(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingKeyInput, setSettingKeyInput] = useState<string>('');
+  const [settingValueInput, setSettingValueInput] = useState<string>('');
+  const [isSavingSetting, setIsSavingSetting] = useState<boolean>(false);
+  const [settingSaveSuccess, setSettingSaveSuccess] = useState<boolean>(false);
+
+  // Audit Logs State (Admin only)
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState<boolean>(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditActionFilter, setAuditActionFilter] = useState<string>('all');
 
   // Create User Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -39,7 +55,6 @@ export function Settings() {
     try {
       const data = await usersService.listUsers();
       setUsers(data);
-      // Auto-set default role_id if available
       if (data.length > 0 && !createRoleId) {
         setCreateRoleId(data[0].role_id);
       }
@@ -50,11 +65,42 @@ export function Settings() {
     }
   }, [isAdmin, createRoleId]);
 
-  useEffect(() => {
-    if (activeTab === 'users' && isAdmin) {
-      fetchUsers();
+  const fetchSettings = useCallback(async () => {
+    if (!isAdmin) return;
+    setIsLoadingSettings(true);
+    setSettingsError(null);
+    try {
+      const data = await settingsService.getSettings();
+      setSystemSettings(data);
+    } catch (err: any) {
+      setSettingsError(err?.message || 'Failed to load system settings.');
+    } finally {
+      setIsLoadingSettings(false);
     }
-  }, [activeTab, isAdmin, fetchUsers]);
+  }, [isAdmin]);
+
+  const fetchAuditLogs = useCallback(async () => {
+    if (!isAdmin) return;
+    setIsLoadingAudit(true);
+    setAuditError(null);
+    try {
+      const data = await settingsService.getAuditLogs({
+        action: auditActionFilter !== 'all' ? auditActionFilter : undefined,
+      });
+      setAuditLogs(data);
+    } catch (err: any) {
+      setAuditError(err?.message || 'Failed to retrieve audit log history.');
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  }, [isAdmin, auditActionFilter]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (activeTab === 'users') fetchUsers();
+    else if (activeTab === 'system') fetchSettings();
+    else if (activeTab === 'audit') fetchAuditLogs();
+  }, [activeTab, isAdmin, fetchUsers, fetchSettings, fetchAuditLogs]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,20 +150,49 @@ export function Settings() {
     }
   };
 
+  const handleSaveSetting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!settingKeyInput.trim()) return;
+
+    setIsSavingSetting(true);
+    setSettingsError(null);
+    setSettingSaveSuccess(false);
+
+    let parsedVal: any = settingValueInput;
+    try {
+      parsedVal = JSON.parse(settingValueInput);
+    } catch {
+      // keep string
+    }
+
+    try {
+      await settingsService.setSetting(settingKeyInput.trim(), parsedVal);
+      setSettingSaveSuccess(true);
+      setSettingKeyInput('');
+      setSettingValueInput('');
+      fetchSettings();
+      setTimeout(() => setSettingSaveSuccess(false), 2500);
+    } catch (err: any) {
+      setSettingsError(err?.message || 'Failed to update system setting.');
+    } finally {
+      setIsSavingSetting(false);
+    }
+  };
+
   const userHeaders = ['Email', 'Username', 'Role ID', 'Account Status', 'Last Login', 'Actions'];
   const userRows = users.map((u) => [
-    <span className="font-semibold text-white text-xs">{u.email}</span>,
-    <span className="text-slate-300 text-xs">{u.username || <span className="text-slate-500 italic">None</span>}</span>,
-    <span className="font-mono text-slate-400 text-[11px] truncate max-w-[120px] block" title={u.role_id}>
+    <span key="email" className="font-semibold text-white text-xs">{u.email}</span>,
+    <span key="user" className="text-slate-300 text-xs">{u.username || <span className="text-slate-500 italic">None</span>}</span>,
+    <span key="role" className="font-mono text-slate-400 text-[11px] truncate max-w-[120px] block" title={u.role_id}>
       {u.role_id}
     </span>,
-    <Badge severity={u.is_active ? 'success' : 'danger'}>
+    <Badge key="status" severity={u.is_active ? 'success' : 'danger'}>
       {u.is_active ? 'ACTIVE' : 'DEACTIVATED'}
     </Badge>,
-    <span className="text-slate-400 text-xs font-mono">
+    <span key="login" className="text-slate-400 text-xs font-mono">
       {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : 'Never'}
     </span>,
-    <div>
+    <div key="actions">
       {u.is_active && u.id !== user?.id && (
         <Button
           variant="danger"
@@ -133,6 +208,25 @@ export function Settings() {
     </div>,
   ]);
 
+  const auditHeaders = ['Timestamp', 'Actor Type', 'Action', 'Target', 'Details'];
+  const auditRows = auditLogs.map((a) => [
+    <span key="ts" className="text-xs text-slate-400 font-mono">
+      {new Date(a.created_at).toLocaleString()}
+    </span>,
+    <span key="actor" className="font-mono text-xs uppercase px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+      {a.actor_type}
+    </span>,
+    <span key="act" className="font-mono text-xs text-cyan-300 font-semibold">
+      {a.action}
+    </span>,
+    <span key="target" className="text-xs text-slate-300 font-mono">
+      {a.target_type ? `${a.target_type}${a.target_id ? `:${a.target_id.slice(0, 8)}` : ''}` : '—'}
+    </span>,
+    <span key="det" className="text-[11px] text-slate-400 font-mono truncate max-w-xs block" title={JSON.stringify(a.details)}>
+      {a.details ? JSON.stringify(a.details) : '—'}
+    </span>,
+  ]);
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -140,7 +234,7 @@ export function Settings() {
         <div>
           <h2 className="text-xl font-bold text-slate-100 tracking-tight">System Settings & Administration</h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Manage your personal profile, provision authorized users, and review platform configurations.
+            Manage your personal profile, provision authorized users, and configure organization policies.
           </p>
         </div>
       </div>
@@ -180,13 +274,42 @@ export function Settings() {
 
         <button
           onClick={() => setActiveTab('system')}
-          className={`pb-3 px-3 border-b-2 transition-colors ${
+          className={`pb-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 ${
             activeTab === 'system'
               ? 'border-cyan-500 text-cyan-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          Platform Settings
+          <span>Platform Settings</span>
+          {isAdmin ? (
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+              Admin
+            </span>
+          ) : (
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-500">
+              Locked
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`pb-3 px-3 border-b-2 transition-colors flex items-center gap-1.5 ${
+            activeTab === 'audit'
+              ? 'border-cyan-500 text-cyan-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <span>Audit Logs</span>
+          {isAdmin ? (
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+              Admin
+            </span>
+          ) : (
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-500">
+              Locked
+            </span>
+          )}
         </button>
       </div>
 
@@ -271,34 +394,143 @@ export function Settings() {
         </div>
       )}
 
-      {/* PLATFORM SETTINGS TAB */}
+      {/* PLATFORM SETTINGS TAB (ADMIN ONLY) */}
       {activeTab === 'system' && (
-        <Card title="System Settings Configuration" description="Environment & security controls">
-          <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-200">System Key-Value Store</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
-                  Phase 22 Feature
-                </span>
-              </div>
-              <p className="text-slate-400">
-                Arbitrary key-value configuration (<code className="text-cyan-300 font-mono">/api/v1/settings/</code>)
-                is scheduled for Phase 22 security hardening. Current application settings are defined via backend environment variables.
-              </p>
-            </div>
+        <div className="space-y-4">
+          {!isAdmin ? (
+            <EmptyState
+              title="Administrator Role Required"
+              description="Platform configuration and key-value management are restricted to platform Administrators."
+            />
+          ) : (
+            <>
+              <Card title="Update System Parameter" description="Persist organization-wide configuration keys">
+                <form onSubmit={handleSaveSetting} className="space-y-3">
+                  {settingSaveSuccess && (
+                    <div className="p-2.5 rounded bg-emerald-950/70 border border-emerald-800 text-xs text-emerald-300">
+                      Configuration key saved successfully!
+                    </div>
+                  )}
+                  {settingsError && (
+                    <div className="p-2.5 rounded bg-rose-950/70 border border-rose-800 text-xs text-rose-300">
+                      {settingsError}
+                    </div>
+                  )}
 
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
-              <span className="font-semibold text-slate-200">Active Security Configurations:</span>
-              <ul className="text-slate-300 space-y-1 font-mono text-[11px]">
-                <li>• Authentication Lockout: 5 failed attempts &rarr; 10-minute lock (FR-1.5)</li>
-                <li>• Agent Offline Threshold: 90 seconds heartbeat silence</li>
-                <li>• Threat Detection Rules: 3 active behavioral rules (Phase 15)</li>
-                <li>• Password Cryptography: bcrypt hashing with individual salt</li>
-              </ul>
-            </div>
-          </div>
-        </Card>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Setting Key</label>
+                      <input
+                        type="text"
+                        value={settingKeyInput}
+                        onChange={(e) => setSettingKeyInput(e.target.value)}
+                        placeholder="e.g. heartbeat_timeout_seconds"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Setting Value (JSON or String)</label>
+                      <input
+                        type="text"
+                        value={settingValueInput}
+                        onChange={(e) => setSettingValueInput(e.target.value)}
+                        placeholder='e.g. 90 or {"enabled": true}'
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      isLoading={isSavingSetting}
+                      disabled={!settingKeyInput.trim()}
+                    >
+                      Save Configuration Key
+                    </Button>
+                  </div>
+                </form>
+              </Card>
+
+              <Card title="Active Organization Configuration Store" description="Configured settings in organization database">
+                {isLoadingSettings ? (
+                  <LoadingSpinner size="md" message="Loading configuration keys..." />
+                ) : systemSettings.length === 0 ? (
+                  <EmptyState
+                    title="No custom settings found"
+                    description="Use the form above to define organization configuration parameters."
+                  />
+                ) : (
+                  <div className="divide-y divide-slate-800/80">
+                    {systemSettings.map((s) => (
+                      <div key={s.id} className="py-2.5 flex items-center justify-between font-mono text-xs">
+                        <div>
+                          <span className="text-cyan-400 font-semibold">{s.key}</span>
+                          <span className="text-slate-500 text-[10px] ml-2">({new Date(s.updated_at).toLocaleString()})</span>
+                        </div>
+                        <span className="text-slate-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800 max-w-sm truncate">
+                          {typeof s.value === 'object' ? JSON.stringify(s.value) : String(s.value)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* AUDIT LOGS TAB (ADMIN ONLY) */}
+      {activeTab === 'audit' && (
+        <div className="space-y-4">
+          {!isAdmin ? (
+            <EmptyState
+              title="Administrator Role Required"
+              description="Access to security audit logs is restricted to Administrators."
+            />
+          ) : (
+            <Card
+              title="Administrative Audit Trail"
+              description="Security events, user provisioning, scans, and system modifications"
+              action={
+                <select
+                  value={auditActionFilter}
+                  onChange={(e) => setAuditActionFilter(e.target.value)}
+                  className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-300 font-mono focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="all">All Actions</option>
+                  <option value="user_login">user_login</option>
+                  <option value="user_login_failed">user_login_failed</option>
+                  <option value="report_generated">report_generated</option>
+                  <option value="alert_status_changed">alert_status_changed</option>
+                  <option value="agent_enrolled">agent_enrolled</option>
+                </select>
+              }
+            >
+              {auditError && (
+                <div className="mb-4 p-3 bg-rose-950/60 border border-rose-800 rounded-lg text-xs text-rose-300">
+                  {auditError}
+                </div>
+              )}
+
+              {isLoadingAudit ? (
+                <LoadingSpinner size="md" message="Retrieving compliance audit records..." />
+              ) : auditLogs.length === 0 ? (
+                <EmptyState
+                  title="No audit logs found"
+                  description="No system audit records match the selected filter."
+                />
+              ) : (
+                <Table headers={auditHeaders} rows={auditRows} />
+              )}
+            </Card>
+          )}
+        </div>
       )}
 
       {/* CREATE USER MODAL */}
