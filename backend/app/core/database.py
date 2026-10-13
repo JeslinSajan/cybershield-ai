@@ -1,10 +1,84 @@
+import json as _json_module
+import uuid as _uuid_module
 from sqlalchemy import create_engine, text
+from sqlalchemy.dialects.postgresql import INET as PGINET, JSONB as PGJSONB, UUID as PGUUID
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from app.core.config import get_settings
 import logging
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# SQLite compatibility patching for PostgreSQL types (UUID, JSONB, INET)
+# ---------------------------------------------------------------------------
+def _visit_JSONB(self, type_, **kw):
+    return "TEXT"
+
+def _visit_UUID(self, type_, **kw):
+    return "CHAR(36)"
+
+def _visit_INET(self, type_, **kw):
+    return "VARCHAR(45)"
+
+SQLiteTypeCompiler.visit_JSONB = _visit_JSONB
+SQLiteTypeCompiler.visit_UUID = _visit_UUID
+SQLiteTypeCompiler.visit_INET = _visit_INET
+
+if not getattr(PGUUID, "_sqlite_patched", False):
+    _orig_uuid_bind_processor = PGUUID.bind_processor
+    _orig_uuid_result_processor = PGUUID.result_processor
+    _orig_jsonb_bind_processor = PGJSONB.bind_processor
+    _orig_jsonb_result_processor = PGJSONB.result_processor
+
+    def _uuid_bind_processor(self, dialect):
+        if dialect.name == "sqlite":
+            def process(value):
+                if value is None:
+                    return None
+                return str(value)
+            return process
+        return _orig_uuid_bind_processor(self, dialect)
+
+    def _uuid_result_processor(self, dialect, coltype):
+        if dialect.name == "sqlite":
+            def process(value):
+                if value is None:
+                    return None
+                try:
+                    return _uuid_module.UUID(str(value))
+                except (ValueError, AttributeError):
+                    return value
+            return process
+        return _orig_uuid_result_processor(self, dialect, coltype)
+
+    def _jsonb_bind_processor(self, dialect):
+        if dialect.name == "sqlite":
+            def process(value):
+                if value is None:
+                    return None
+                return _json_module.dumps(value)
+            return process
+        return _orig_jsonb_bind_processor(self, dialect)
+
+    def _jsonb_result_processor(self, dialect, coltype):
+        if dialect.name == "sqlite":
+            def process(value):
+                if value is None:
+                    return None
+                try:
+                    return _json_module.loads(value)
+                except Exception:
+                    return value
+            return process
+        return _orig_jsonb_result_processor(self, dialect, coltype)
+
+    PGUUID.bind_processor = _uuid_bind_processor
+    PGUUID.result_processor = _uuid_result_processor
+    PGJSONB.bind_processor = _jsonb_bind_processor
+    PGJSONB.result_processor = _jsonb_result_processor
+    PGUUID._sqlite_patched = True
 
 Base = declarative_base()
 
@@ -82,9 +156,17 @@ def SessionLocal():
 
 
 def init_db():
-    """Initialize database engine and session factory."""
-    _ = get_engine()
+    """Initialize database engine and session factory.
+    If using SQLite (local dev), automatically ensure all tables are created.
+    """
+    engine = get_engine()
     _ = get_session_factory()
+    settings = get_settings()
+    db_url = _normalize_db_url(settings.DATABASE_URL)
+    if db_url.startswith("sqlite"):
+        import app.models  # noqa: F401
+        Base.metadata.create_all(bind=engine)
+        logger.info("SQLite database tables verified/created")
     logger.info("Database initialization complete")
 
 

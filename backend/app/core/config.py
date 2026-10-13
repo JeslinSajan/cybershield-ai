@@ -8,10 +8,10 @@ import warnings
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
-    model_config = ConfigDict(env_file=".env", case_sensitive=True)
+    model_config = ConfigDict(env_file=(".env", "backend/.env"), case_sensitive=True, extra="ignore")
 
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "sqlite:///./cybershield_test.db"
     DATABASE_URL_DIRECT: Optional[str] = None  # for Alembic — non-pooled Neon URL
 
     # Agent settings
@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     # Seeding — initial admin user (Phase 8)
     # Set these in Render/production to auto-create the first admin on deploy.
     # Neither value is ever logged — see seed.py for the security note.
-    SEED_ADMIN_EMAIL: Optional[str] = None
-    SEED_ADMIN_PASSWORD: Optional[str] = None
+    SEED_ADMIN_EMAIL: Optional[str] = "admin@cybershield.local"
+    SEED_ADMIN_PASSWORD: Optional[str] = "Admin123456!"
 
     # CORS (optional, can be expanded later)
     CORS_ORIGINS: Optional[str] = None

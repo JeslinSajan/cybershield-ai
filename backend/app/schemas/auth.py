@@ -9,10 +9,10 @@ import uuid
 class LoginRequest(BaseModel):
     """Request body for POST /auth/login."""
 
-    email: EmailStr = Field(..., description="User's email address")
+    email: str = Field(..., min_length=3, max_length=255, description="User's email address")
     password: str = Field(..., min_length=1, description="User's plaintext password (never stored or logged)")
 
-    model_config = {"json_schema_extra": {"example": {"email": "admin@example.com", "password": "StrongPass!123"}}}
+    model_config = {"json_schema_extra": {"example": {"email": "admin@cybershield.local", "password": "StrongPass!123"}}}
 
 
 class UserInToken(BaseModel):
