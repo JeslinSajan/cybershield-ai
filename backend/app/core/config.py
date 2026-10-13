@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "CyberShield AI"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "0.1.1"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 
