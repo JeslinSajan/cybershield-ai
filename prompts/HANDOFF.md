@@ -497,9 +497,58 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 18 — Threat Intelligence — ⬜ Not Started
+## Phase 18 — Threat Intelligence — ✅ COMPLETED 2026-10-13
 
-*Append after Phase 18.*
+### Database & Schema Verification:
+- `threat_indicators` table (in `backend/app/models/log.py`):
+  - `id`: UUID (Primary Key)
+  - `organization_id`: UUID (Foreign Key to organizations.id, ondelete CASCADE, indexed)
+  - `indicator_type`: String(20) (`ip`, `domain`, `hash`, indexed)
+  - `value`: String(255) (indexed)
+  - `description`: Text (nullable)
+  - `source`: String(50) (default "local")
+  - `created_at`, `updated_at`: DateTime(timezone=True)
+  - `__table_args__`: UniqueConstraint on `(organization_id, indicator_type, value)`.
+
+### Seed Dataset:
+- File: `backend/data/threat_seed.json` with 10 realistic threat indicators (C2 IPs, scanning botnets, phishing domains, and ransomware payload hashes).
+- Startup seeding implemented in `backend/app/core/seed.py`: `seed_threat_intelligence(db, default_org.id)` auto-seeds demo IOCs on startup if empty.
+
+### Endpoints Created / Implemented (`backend/app/api/v1/threat_intelligence.py`):
+- `POST /api/v1/threat-intelligence/`:
+  - RBAC: Administrator, Security Analyst (`get_current_analyst_or_admin`).
+  - Validation: validates indicator type (`ip`, `domain`, `hash`), checks duplicate constraint and returns 409 `CONFLICT`.
+  - Auditing: creates `AuditLog` entry (`action="threat_indicator_created"`).
+- `GET /api/v1/threat-intelligence/`:
+  - RBAC: All roles (`get_any_authenticated_user`).
+  - Filters: `indicator_type`, `source`, `search` substring matching on value/description, pagination `limit`/`offset`.
+- `GET /api/v1/threat-intelligence/{id}`:
+  - RBAC: All roles. Retrieves single indicator with 404 error envelope on missing or cross-tenant query.
+- `DELETE /api/v1/threat-intelligence/{id}`:
+  - RBAC: Administrator ONLY (`get_current_admin`). Security Analyst and Viewer get 403 `FORBIDDEN`.
+  - Auditing: creates `AuditLog` entry (`action="threat_indicator_deleted"`).
+
+### Automated IOC Log Correlation:
+- Integrated in `backend/app/services/detection_service.py`:
+  - `check_malware_indicator(db, org_id, agent_id, source_ip, device_id)`:
+    - Scans incoming agent telemetry for `source_ip` matching `ThreatIndicator` records (`indicator_type='ip'`).
+    - On match: generates High severity alert (`alert_type="malware_indicator"`, `risk_score=40.0`).
+    - Dispatches notifications and writes system audit logs.
+  - Called synchronously in `process_log_detections` during `POST /api/v1/agents/logs` ingestion.
+
+### Frontend Integration:
+- `frontend/src/services/threatIntelService.ts`: full TypeScript API client (`list`, `getById`, `create`, `delete`).
+- `frontend/src/pages/ThreatIntelligence.tsx`:
+  - Live IOC indicator dashboard with KPI counts for Total, Malicious IPs, Domains, and Hashes.
+  - Type-filtered view and live search.
+  - "+ Add Indicator" modal for Analysts and Admins with live validation and error banner.
+  - Delete indicator with confirmation modal (enforced for Admin only).
+  - Single-click copy to clipboard for hashes/IPs/domains with visual feedback.
+
+### Test Evidence:
+- `tests/test_threat_intelligence.py`: 13 passed, 0 failures.
+- Full regression suite: **244 passed, 0 failures** in 63.14s across all phases.
+- Frontend build: `npm run build` succeeded with 0 errors.
 
 ---
 

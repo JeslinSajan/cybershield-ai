@@ -78,6 +78,11 @@ def seed_roles_and_admin(settings) -> None:
         seed_cves(db=db, organization_id=default_org.id)
 
         # ----------------------------------------------------------------
+        # 3.5. Seed demo Threat Intelligence indicators (idempotent)
+        # ----------------------------------------------------------------
+        seed_threat_intelligence(db=db, organization_id=default_org.id)
+
+        # ----------------------------------------------------------------
         # 4. Seed default admin users (idempotent)
         # Seeds the primary admin (from SEED_ADMIN_EMAIL or default) and admin@cybershield.ai.
         # Credentials are never logged.
@@ -200,4 +205,88 @@ def seed_cves(db: Optional[Session] = None, organization_id: Optional[uuid.UUID]
     finally:
         if close_when_done:
             db.close()
+
+
+def seed_threat_intelligence(db: Optional[Session] = None, organization_id: Optional[uuid.UUID] = None) -> int:
+    """Seed demo threat intelligence indicators on startup if table is empty.
+
+    Args:
+        db: Active SQLAlchemy session.
+        organization_id: Organization to associate seed indicators with. Defaults to default org.
+
+    Returns:
+        Number of indicator records inserted.
+    """
+    close_when_done = False
+    if db is None:
+        SessionLocal = get_session_factory()
+        db = SessionLocal()
+        close_when_done = True
+
+    try:
+        from app.models.log import ThreatIndicator
+
+        if organization_id is None:
+            default_org = db.query(Organization).filter(Organization.slug == "default").first()
+            if not default_org:
+                logger.warning("No default organization found — skipping threat intelligence seed")
+                return 0
+            organization_id = default_org.id
+
+        # Check existing indicators across table for this org
+        existing = db.query(ThreatIndicator).filter(ThreatIndicator.organization_id == organization_id).count()
+        if existing >= 5:
+            logger.info("Threat intelligence seed data already present — skipping")
+            return 0
+
+        # Load seed JSON from backend/data/threat_seed.json
+        data_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "threat_seed.json"
+        )
+        if not os.path.exists(data_path):
+            logger.warning(f"Threat intelligence seed file not found at {data_path}")
+            return 0
+
+        with open(data_path, "r", encoding="utf-8") as f:
+            intel_list = json.load(f)
+
+        seeded_count = 0
+        for item in intel_list:
+            itype = item.get("indicator_type")
+            val = item.get("value")
+            if not itype or not val:
+                continue
+
+            dup = db.query(ThreatIndicator).filter(
+                ThreatIndicator.organization_id == organization_id,
+                ThreatIndicator.indicator_type == itype,
+                ThreatIndicator.value == val,
+            ).first()
+            if dup:
+                continue
+
+            record = ThreatIndicator(
+                organization_id=organization_id,
+                indicator_type=itype,
+                value=val,
+                description=item.get("description"),
+                source=item.get("source", "local_seed"),
+            )
+            db.add(record)
+            seeded_count += 1
+
+        if seeded_count > 0:
+            db.commit()
+            logger.info(f"Seeded {seeded_count} threat indicators for organization {organization_id}")
+
+        return seeded_count
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Threat intelligence seeding failed ({type(e).__name__}): {e}")
+        return 0
+    finally:
+        if close_when_done:
+            db.close()
+
 

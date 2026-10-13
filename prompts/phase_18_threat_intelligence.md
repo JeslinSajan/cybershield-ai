@@ -1,6 +1,6 @@
 # Phase 18 — Threat Intelligence
 
-**Status:** Not Started  
+**Status:** Done  
 *(Change to "Done" when this phase is complete)*
 
 ---

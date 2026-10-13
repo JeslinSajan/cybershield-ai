@@ -1,0 +1,62 @@
+[
+  {
+    "indicator_type": "ip",
+    "value": "198.51.100.23",
+    "description": "Known Cobalt Strike Command & Control (C2) server",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "ip",
+    "value": "203.0.113.45",
+    "description": "Mirai botnet aggressive scanner and exploit delivery node",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "ip",
+    "value": "192.0.2.144",
+    "description": "LockBit 3.0 ransomware affiliate exfiltration infrastructure",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "ip",
+    "value": "198.51.100.99",
+    "description": "Distributed SSH and RDP brute-force campaign origin IP",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "domain",
+    "value": "update-service-cdn.com",
+    "description": "Credential harvesting phishing domain impersonating software update service",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "domain",
+    "value": "c2-controller-vault.org",
+    "description": "Emotet botnet dynamic DNS command and control server",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "domain",
+    "value": "telemetry-sync-bad.net",
+    "description": "Unauthorized data exfiltration domain linked to APT campaign",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "hash",
+    "value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "description": "Trojan-Dropper.Win32 multi-stage malware payload SHA-256",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "hash",
+    "value": "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+    "description": "WannaCry ransomware loader artifact hash",
+    "source": "local_seed"
+  },
+  {
+    "indicator_type": "hash",
+    "value": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
+    "description": "Cobalt Strike malleable C2 beacon reflective DLL hash",
+    "source": "local_seed"
+  }
+]

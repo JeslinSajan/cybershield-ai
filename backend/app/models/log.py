@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, INET
 from sqlalchemy.sql import func
 import uuid
@@ -26,11 +26,14 @@ class Log(Base):
 
 class ThreatIndicator(Base):
     __tablename__ = "threat_indicators"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "indicator_type", "value", name="uq_threat_indicators_org_type_val"),
+    )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
-    indicator_type = Column(String(20), nullable=False)
-    value = Column(String(255), nullable=False)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    indicator_type = Column(String(20), nullable=False, index=True)
+    value = Column(String(255), nullable=False, index=True)
     description = Column(Text, nullable=True)
     source = Column(String(50), nullable=False, default="local")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

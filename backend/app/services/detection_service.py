@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.models.alert import Alert
 from app.models.device import Device
-from app.models.log import Log
+from app.models.log import Log, ThreatIndicator
 from app.models.scan import ScanResult
 from app.models.system import AuditLog, Notification
 from app.models.user import User
@@ -265,6 +265,47 @@ def check_suspicious_login(
     return None
 
 
+def check_malware_indicator(
+    db: Session,
+    org_id: uuid.UUID,
+    agent_id: Optional[uuid.UUID],
+    source_ip: str,
+    device_id: Optional[uuid.UUID] = None,
+) -> Optional[Alert]:
+    """
+    Threat Intelligence Rule (Phase 18):
+    Matches source_ip against ThreatIndicator records where indicator_type='ip'.
+    If matched -> High severity alert (risk_score=40.0, alert_type='malware_indicator').
+    """
+    indicator = (
+        db.query(ThreatIndicator)
+        .filter(
+            ThreatIndicator.organization_id == org_id,
+            ThreatIndicator.indicator_type == "ip",
+            ThreatIndicator.value == source_ip,
+        )
+        .first()
+    )
+
+    if indicator:
+        desc = (
+            f"Malicious IP detected: {source_ip} matches threat intelligence feed "
+            f"({indicator.description or 'known malicious indicator'}, source: {indicator.source})"
+        )
+        return create_alert(
+            db=db,
+            organization_id=org_id,
+            alert_type="malware_indicator",
+            severity="High",
+            description=desc,
+            risk_score=40.0,
+            agent_id=agent_id,
+            device_id=device_id,
+            source_ip=source_ip,
+        )
+    return None
+
+
 def process_log_detections(
     db: Session,
     org_id: uuid.UUID,
@@ -276,11 +317,25 @@ def process_log_detections(
     # Avoid re-evaluating the same IP repeatedly in a single batch
     checked_brute_force_ips = set()
     checked_suspicious_ips = set()
+    checked_threat_ips = set()
 
     for entry in logs:
         ip = str(entry.source_ip) if entry.source_ip else None
         if not ip:
             continue
+
+        # Threat Intelligence check (Phase 18)
+        if ip not in checked_threat_ips:
+            checked_threat_ips.add(ip)
+            ti_alert = check_malware_indicator(
+                db=db,
+                org_id=org_id,
+                agent_id=agent_id,
+                source_ip=ip,
+                device_id=entry.device_id,
+            )
+            if ti_alert:
+                created_alerts.append(ti_alert)
 
         if entry.event_type == "login_failure" and ip not in checked_brute_force_ips:
             checked_brute_force_ips.add(ip)
