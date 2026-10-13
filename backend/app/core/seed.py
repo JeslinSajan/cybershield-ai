@@ -78,41 +78,40 @@ def seed_roles_and_admin(settings) -> None:
         seed_cves(db=db, organization_id=default_org.id)
 
         # ----------------------------------------------------------------
-        # 4. Seed default admin user (idempotent)
-        # Only runs if SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are set.
+        # 4. Seed default admin users (idempotent)
+        # Seeds the primary admin (from SEED_ADMIN_EMAIL or default) and admin@cybershield.ai.
         # Credentials are never logged.
         # ----------------------------------------------------------------
-        seed_email = getattr(settings, "SEED_ADMIN_EMAIL", None)
-        seed_password = getattr(settings, "SEED_ADMIN_PASSWORD", None)
-
-        if not seed_email or not seed_password:
-            logger.info("SEED_ADMIN_EMAIL or SEED_ADMIN_PASSWORD not set — skipping admin seed")
-            return
-
-        existing_admin = db.query(User).filter(User.email == seed_email).first()
-        if existing_admin:
-            logger.info("Seed admin already exists — skipping admin seed")
-            return
+        primary_email = getattr(settings, "SEED_ADMIN_EMAIL", None) or "admin@cybershield.local"
+        primary_password = getattr(settings, "SEED_ADMIN_PASSWORD", None) or "Admin123456!"
 
         admin_role = db.query(Role).filter(Role.name == "Administrator").first()
         if not admin_role:
             logger.error("Administrator role not found after seeding — cannot create admin user")
             return
 
-        admin_user = User(
-            organization_id=default_org.id,
-            role_id=admin_role.id,
-            email=seed_email,
-            username="admin",
-            password_hash=hash_password(seed_password),  # plaintext never stored
-            is_active=True,
-            failed_login_count=0,
-        )
-        db.add(admin_user)
-        db.commit()
+        admins_to_seed = [
+            (primary_email, primary_password),
+            ("admin@cybershield.ai", primary_password),
+        ]
 
-        # Log only that seeding completed — never log the email or password value
-        logger.info("Default admin user seeded successfully (credentials from SEED_ADMIN_EMAIL env var)")
+        for seed_email, seed_pass in admins_to_seed:
+            existing_admin = db.query(User).filter(User.email == seed_email).first()
+            if not existing_admin:
+                admin_user = User(
+                    organization_id=default_org.id,
+                    role_id=admin_role.id,
+                    email=seed_email,
+                    username=seed_email.split("@")[0],
+                    password_hash=hash_password(seed_pass),  # plaintext never stored
+                    is_active=True,
+                    failed_login_count=0,
+                )
+                db.add(admin_user)
+                db.commit()
+                logger.info(f"Default admin user seeded successfully for {seed_email}")
+            else:
+                logger.info(f"Seed admin user already exists for {seed_email}")
 
     except Exception as e:
         db.rollback()

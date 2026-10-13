@@ -188,12 +188,13 @@ async def cybershield_exception_handler(request: Request, exc: CyberShieldExcept
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions."""
     logger.error(f"Unexpected error: {str(exc)}", exc_info=True)
+    details = [f"{type(exc).__name__}: {str(exc)}"] if (settings.DEBUG or settings.ENVIRONMENT != "production") else []
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ErrorResponse.to_dict(
             "INTERNAL_SERVER_ERROR",
             "An unexpected error occurred",
-            []
+            details
         )
     )
 

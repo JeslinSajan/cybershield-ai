@@ -138,21 +138,39 @@ export function Login() {
                 </div>
               </div>
 
-              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-                <div>
-                  <span className="text-slate-500">Default: </span>
-                  <span className="font-mono text-cyan-400">admin@cybershield.local</span>
+              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-slate-500">Local Admin: </span>
+                    <span className="font-mono text-cyan-400">admin@cybershield.local</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail('admin@cybershield.local');
+                      setPassword('Admin123456!');
+                    }}
+                    className="px-2 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 border border-cyan-800/60 text-cyan-300 font-mono text-[10px] transition-colors"
+                  >
+                    Autofill
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('admin@cybershield.local');
-                    setPassword('Admin123456!');
-                  }}
-                  className="px-2 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 border border-cyan-800/60 text-cyan-300 font-mono text-[10px] transition-colors"
-                >
-                  Autofill
-                </button>
+                <div className="flex items-center justify-between border-t border-slate-900 pt-1.5">
+                  <div>
+                    <span className="text-slate-500">Prod Admin: </span>
+                    <span className="font-mono text-cyan-400">admin@cybershield.ai</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail('admin@cybershield.ai');
+                      setPassword('Admin123456!');
+                    }}
+                    className="px-2 py-0.5 rounded bg-cyan-950 hover:bg-cyan-900 border border-cyan-800/60 text-cyan-300 font-mono text-[10px] transition-colors"
+                  >
+                    Autofill
+                  </button>
+                </div>
               </div>
 
               <div className="pt-2">

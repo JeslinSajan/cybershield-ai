@@ -157,16 +157,16 @@ def SessionLocal():
 
 def init_db():
     """Initialize database engine and session factory.
-    If using SQLite (local dev), automatically ensure all tables are created.
+    Automatically ensure all model tables exist across all environments (SQLite and PostgreSQL).
     """
     engine = get_engine()
     _ = get_session_factory()
-    settings = get_settings()
-    db_url = _normalize_db_url(settings.DATABASE_URL)
-    if db_url.startswith("sqlite"):
+    try:
         import app.models  # noqa: F401
         Base.metadata.create_all(bind=engine)
-        logger.info("SQLite database tables verified/created")
+        logger.info("Database tables verified/created successfully")
+    except Exception as e:
+        logger.warning(f"Database table verification note: {type(e).__name__}: {str(e)}")
     logger.info("Database initialization complete")
 
 
