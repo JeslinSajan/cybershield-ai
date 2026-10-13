@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -12,6 +13,7 @@ import { scansService } from '../services/scansService';
 import { useAuth } from '../contexts/AuthContext';
 
 export function Vulnerabilities() {
+  const navigate = useNavigate();
   const { canScan } = useAuth();
   const [vulns, setVulns] = useState<Vulnerability[]>([]);
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
@@ -302,7 +304,25 @@ export function Vulnerabilities() {
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-2 flex justify-between items-center">
+              {canScan && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-cyan-400 border-cyan-800 hover:bg-cyan-950/40"
+                  onClick={() => {
+                    setIsDetailModalOpen(false);
+                    navigate(`/ai-assistant?tab=vulnerability&id=${selectedVuln.id}`);
+                  }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Explain with AI
+                  </span>
+                </Button>
+              )}
               <Button variant="secondary" size="sm" onClick={() => setIsDetailModalOpen(false)}>
                 Close
               </Button>

@@ -110,6 +110,16 @@ export function Sidebar() {
       ),
     },
     {
+      path: '/ai-assistant',
+      label: 'AI Security Assistant',
+      badge: 'P19',
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      ),
+    },
+    {
       path: '/reports',
       label: 'Reports',
       badge: 'P20',
@@ -188,7 +198,9 @@ export function Sidebar() {
             Security Intelligence
           </p>
           <ul className="space-y-1">
-            {intelligenceNav.map((item) => (
+            {intelligenceNav
+              .filter((item) => item.path !== '/ai-assistant' || user?.role !== 'Viewer')
+              .map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
@@ -216,12 +228,13 @@ export function Sidebar() {
         </div>
 
         {/* Administration */}
-        <div>
-          <p className="px-3 pb-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-            Administration
-          </p>
-          <ul className="space-y-1">
-            {adminNav.map((item) => (
+        {user?.role === 'Administrator' && (
+          <div>
+            <p className="px-3 pb-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              Administration
+            </p>
+            <ul className="space-y-1">
+              {adminNav.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
@@ -240,8 +253,9 @@ export function Sidebar() {
                 </NavLink>
               </li>
             ))}
-          </ul>
-        </div>
+            </ul>
+          </div>
+        )}
       </nav>
 
       {/* User Footer Profile */}

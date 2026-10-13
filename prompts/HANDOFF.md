@@ -552,9 +552,76 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 19 — AI Security Assistant — ⬜ Not Started
+## Phase 19 — AI Security Assistant — ✅ COMPLETED 2026-10-13
 
-*Append after Phase 19.*
+### Architecture & Ground Truth:
+- **Local Rule AI Only (`backend/app/services/ai_service.py`):**
+  - Implements abstract `AIService` via `LocalRuleAI` class.
+  - Zero external cloud AI APIs (no OpenAI, no Gemini). Runs 100% offline and deterministic.
+  - UI Identification: `Local Security Explanation Engine`.
+  - Methods:
+    - `explain_alert(db, alert_id, org_id)`: Generates triage analysis, asset context, threat mechanism (brute force, port scan, suspicious login, malware IOC), risk impact, and step-by-step incident response playbook.
+    - `explain_vulnerability(db, vuln_id, org_id)`: Correlates detected service banners with CVE catalog, providing technical vulnerability summaries, CVSS severity analysis, attack vectors, and remediation/mitigation guidance.
+    - `explain_risk_score(db, device_id, org_id)`: Parses and quantifies `RiskScore.factor_breakdown` (vulnerability points, active alert penalties, network port exposure penalties) and provides actionable guidance to reduce host risk score.
+    - `chat(db, org_id, user_id, message, context_type, context_id)`: Handles multi-turn interactive security inquiries, dynamically mapping inquiries to contextual rules while persisting conversation threads.
+
+### Database Models (`backend/app/models/ai.py`):
+- `AIConversation`:
+  - `id`: UUID Primary Key
+  - `organization_id`: UUID Foreign Key to `organizations.id`
+  - `user_id`: UUID Foreign Key to `users.id`
+  - `subject_type`: String(30) (`alert`, `vulnerability`, `risk`, `device`)
+  - `subject_id`: UUID
+  - `provider_type`: String(30), default `'local_rule_ai'`
+  - `created_at`, `updated_at`: DateTime(timezone=True)
+- `AIMessage`:
+  - `id`: UUID Primary Key
+  - `conversation_id`: UUID Foreign Key to `ai_conversations.id`
+  - `role`: String(20) (`user`, `assistant`)
+  - `content`: Text
+  - `created_at`: DateTime(timezone=True)
+
+### API Endpoints Implemented (`backend/app/api/v1/ai.py`):
+- `POST /api/v1/ai/explain-alert`:
+  - RBAC: Administrator, Security Analyst (`get_current_analyst_or_admin`). Viewer gets 403 `FORBIDDEN`.
+  - Body: `{"alert_id": "<UUID>"}`
+  - Returns: `{"target_id": "...", "target_type": "alert", "explanation": "...", "provider": "local_rule_ai"}`
+- `POST /api/v1/ai/explain-vulnerability`:
+  - RBAC: Administrator, Security Analyst. Viewer gets 403.
+  - Body: `{"vulnerability_id": "<UUID>"}`
+- `POST /api/v1/ai/explain-risk`:
+  - RBAC: Administrator, Security Analyst. Viewer gets 403.
+  - Body: `{"device_id": "<UUID>"}`
+- `POST /api/v1/ai/chat`:
+  - RBAC: Administrator, Security Analyst. Viewer gets 403.
+  - Body: `{"message": "...", "context_type": "alert|vulnerability|risk", "context_id": "<UUID>"}`
+  - Automatically creates or reuses `AIConversation` and persists user/assistant `AIMessage` rows.
+- `GET /api/v1/ai/conversations`:
+  - RBAC: Administrator, Security Analyst. Lists conversation history for current user and tenant org.
+- `GET /api/v1/ai/conversations/{id}`:
+  - RBAC: Administrator, Security Analyst. Returns conversation and complete message transcripts. 404 on missing or cross-tenant query.
+
+### Frontend Implementation & Cross-Page Integrations:
+- `frontend/src/services/aiService.ts`: Full typed client for all explanation and chat endpoints.
+- `frontend/src/pages/AIAssistant.tsx`:
+  - Tabbed investigation console for Alerts, Vulnerabilities, and Device Risk.
+  - Real-time explanation rendering with playbook actions and factor breakdowns.
+  - Interactive follow-up chat with historical transcript rendering.
+  - URL query parameter deep-linking (`?tab=alert|vulnerability|risk&id=<UUID>`) with auto-explanation generation.
+  - Role Guard: Viewer role displays restricted banner explaining RBAC requirements per FR-2.1.
+- `frontend/src/App.tsx`: Registered `/ai-assistant` route.
+- `frontend/src/components/layout/Sidebar.tsx`:
+  - Added `AI Security Assistant` navigation item with `P19` badge under Security Intelligence.
+  - Filtered navigation so AI Assistant is hidden for Viewer users (`user?.role !== 'Viewer'`).
+- Cross-Page Deep Links:
+  - `frontend/src/pages/Alerts.tsx`: Added "Explain with AI" button on alert details modal.
+  - `frontend/src/pages/Vulnerabilities.tsx`: Added "Explain with AI" button on CVE details modal.
+  - `frontend/src/pages/RiskManagement.tsx`: Added "Explain with AI" button on device risk breakdown modal.
+
+### Test Evidence:
+- `tests/test_ai.py`: 18 passed, 0 failures.
+- Full regression suite: **262 passed, 0 failures** in 82.85s across all phases.
+- Frontend build: `tsc && vite build` succeeded with exit code 0.
 
 ---
 

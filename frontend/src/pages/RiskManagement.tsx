@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -7,8 +8,11 @@ import { Modal } from '../components/ui/Modal';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { EmptyState } from '../components/ui/EmptyState';
 import { riskService, DeviceRiskScore } from '../services/riskService';
+import { useAuth } from '../contexts/AuthContext';
 
 export function RiskManagement() {
+  const navigate = useNavigate();
+  const { canScan } = useAuth();
   const [scores, setScores] = useState<DeviceRiskScore[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -351,6 +355,31 @@ export function RiskManagement() {
             <div className="pt-2 text-[10px] text-slate-500 font-mono flex justify-between items-center border-t border-slate-800">
               <span>Formula: {selectedScore.formula_version || 'v1'}</span>
               <span>Updated: {selectedScore.updated_at ? new Date(selectedScore.updated_at).toLocaleString() : '—'}</span>
+            </div>
+
+            <div className="pt-2 flex justify-between items-center">
+              {canScan && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-cyan-400 border-cyan-800 hover:bg-cyan-950/40"
+                  onClick={() => {
+                    const devId = selectedScore.device_id;
+                    setSelectedScore(null);
+                    navigate(`/ai-assistant?tab=risk&id=${devId}`);
+                  }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Explain with AI
+                  </span>
+                </Button>
+              )}
+              <Button variant="secondary" size="sm" onClick={() => setSelectedScore(null)}>
+                Close
+              </Button>
             </div>
           </div>
         </Modal>

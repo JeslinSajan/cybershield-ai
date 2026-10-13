@@ -15,6 +15,7 @@ import { RiskManagement } from './pages/RiskManagement';
 import { ThreatIntelligence } from './pages/ThreatIntelligence';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
+import { AIAssistant } from './pages/AIAssistant';
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
                     <Route path="/alerts" element={<Alerts />} />
                     <Route path="/risk-management" element={<RiskManagement />} />
                     <Route path="/threat-intelligence" element={<ThreatIntelligence />} />
+                    <Route path="/ai-assistant" element={<AIAssistant />} />
                     <Route path="/reports" element={<Reports />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
