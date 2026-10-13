@@ -625,9 +625,64 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 20 — Reports — ⬜ Not Started
+## Phase 20 — Reports — ✅ COMPLETED 2026-10-13
 
-*Append after Phase 20.*
+### Architecture & Ground Truth:
+- **Dependencies (`backend/requirements.txt`):**
+  - Added `fpdf2==2.7.9` (Python 3.12 compatible).
+  - Used standard library `csv` module for CSV reporting.
+- **Report Generation Service (`backend/app/services/report_service.py`):**
+  - Output directory: `backend/generated_reports/` (configured in `.gitignore`).
+  - File path pattern: `backend/generated_reports/cybershield_report_{report.id}.pdf` (PDF) and `backend/generated_reports/cybershield_report_{report.id}.csv` (CSV).
+  - Custom branded PDF layout (`CyberShieldPDF`):
+    - Branded dark slate navy SOC header with cyan accents.
+    - Assessment timeframe, organization name, confidentiality footer, page numbers.
+    - Three supported report scopes:
+      1. `security_overview`: Monitored device count, agent status, open alerts by severity, CVE count, average risk score, SOC recommendations.
+      2. `vulnerability`: CVE code, target host, severity, CVSS base score, service/version, remediation guidance.
+      3. `alert`: Incident audit trail with timestamps, alert types, severities, triage status, target host, and description.
+
+### Database Schema (`backend/app/models/report.py`):
+- `reports` table:
+  - `id`: UUID (Primary Key, default `uuid.uuid4`)
+  - `organization_id`: UUID (Foreign Key to `organizations.id`, ondelete `CASCADE`, indexed)
+  - `created_by_user_id`: UUID (Foreign Key to `users.id`, indexed)
+  - `report_type`: String(30) (`security_overview`, `vulnerability`, `alert`)
+  - `period_start`: DateTime(timezone=True)
+  - `period_end`: DateTime(timezone=True)
+  - `file_name`: String(255) (`cybershield_report_<uuid>.pdf`)
+  - `mime_type`: String(50) (`application/pdf`)
+  - `status`: String(20), default `'READY'`
+  - `created_at`, `updated_at`: DateTime(timezone=True)
+
+### API Endpoints Implemented (`backend/app/api/v1/reports.py`):
+- `POST /api/v1/reports/`:
+  - RBAC: Administrator, Security Analyst (`get_current_analyst_or_admin`). Viewer gets 403 `FORBIDDEN`.
+  - Body: `{"type": "security_overview|vulnerability|alert", "from_date": "<ISO>", "to_date": "<ISO>"}`
+  - Pre-generates document, commits Report record, and writes `AuditLog` entry (`action="report_generated"`).
+- `GET /api/v1/reports/`:
+  - RBAC: All roles (`get_any_authenticated_user`).
+  - Query filters: `?type=...`, `limit`, `offset`. Enforces tenant organization isolation.
+- `GET /api/v1/reports/{id}`:
+  - RBAC: All roles. Retrieves metadata with 404 envelope on missing or cross-tenant query.
+- `GET /api/v1/reports/{id}/download?format=pdf|csv`:
+  - RBAC: Administrator, Security Analyst (`get_current_analyst_or_admin`). Viewer receives 403 `FORBIDDEN`.
+  - Response headers:
+    - PDF: `Content-Type: application/pdf`, `Content-Disposition: attachment; filename="cybershield_{report_type}_{id}.pdf"`
+    - CSV: `Content-Type: text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="cybershield_{report_type}_{id}.csv"`
+
+### Frontend Implementation:
+- `frontend/src/services/reportsService.ts`: Full TypeScript client (`listReports`, `getReport`, `generateReport`, `downloadReport` with blob save trigger).
+- `frontend/src/pages/Reports.tsx`:
+  - Parameter form with report type selector, preset timeframes (7d, 30d, 90d, custom dates).
+  - Single-click "Generate Report" button with validation and success feedback.
+  - Historical reports archive table with type badges, assessment date ranges, and direct PDF and CSV download buttons.
+  - Enforced Viewer role restrictions (cannot trigger generation or downloads).
+
+### Test Evidence:
+- `tests/test_reports.py`: 16 passed, 0 failures.
+- Full regression suite: **278 passed, 0 failures** in 83.97s across all phases.
+- Frontend build: `tsc && vite build` succeeded with exit code 0.
 
 ---
 
