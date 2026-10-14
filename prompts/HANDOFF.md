@@ -853,9 +853,24 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 26 — Documentation — ⬜ Not Started
+## Phase 26 — Documentation — ✅ COMPLETED 2026-10-14
 
-*Append after Phase 26.*
+### Architecture & Ground Truth:
+- **Comprehensive Documentation Suite Created/Updated:**
+  - `docs/INSTALLATION.md`: Step-by-step installation instructions for Backend (Python 3.12, venv, requirements, Alembic migrations, Uvicorn), Frontend (React 18, Vite, npm run dev/build), Agent (Nmap installation, environment, first run & identity creation), and Neon PostgreSQL (dual connection string pattern: pooled runtime and direct migration port).
+  - `docs/USER_MANUAL.md`: Complete operations guide covering user login, RBAC permission matrix (Admin, Analyst, Viewer), agent enrollment & revocation, authorized network discovery with warning dialogs, vulnerability triage, threat detection rules, incident alert lifecycles (`Open` ➔ `Acknowledged` ➔ `Investigating` ➔ `Resolved`), LocalRuleAI security explanation & chat, and executive PDF/CSV report generation.
+  - `docs/ARCHITECTURE.md`: High-level system architecture specification including a detailed Mermaid diagram representing Client Tier (Browser), CDN & Hosting (Vercel, Render), Database (Neon Serverless PgBouncer pooler and direct migration port, 25 relational tables), Customer Subnet (Python 3.12 Agent, Nmap, Discovered Devices, Host Logs). Detailed backend and agent module hierarchies.
+  - `docs/API_REFERENCE.md`: Complete human-readable canonical reference of all live REST endpoints grouped across 15 functional domains (Health, Auth, Users, Agents, Devices, Scans, Vulnerabilities, Logs, Alerts, Risk Scores, Threat Intelligence, Local AI, Reports, Notifications, System Settings & Audit Logs) with HTTP methods, paths, authentication requirements, and role matrix.
+  - `docs/TEST_RESULTS.md`: Comprehensive test report documenting the full automated test suite (**322 passed, 0 failures** across 18 test files in 84.26s) and the 14-step operational lifecycle verification.
+  - `README.md` (root level): High-impact repository overview, live deployment links (Vercel, Render, Neon), technology stack table, quickstart guide, license notice, and embedded UI screenshots.
+- **Visual Assets Generated (`docs/screenshots/`):**
+  - Generated 8 high-resolution (1280x800) dark-mode UI screenshots matching platform layouts:
+    `login_page.png`, `dashboard.png`, `agents_page.png`, `devices_page.png`, `vulnerabilities_page.png`, `alerts_page.png`, `ai_explanation.png`, `report_pdf.png`.
+  - Created generator script `scripts/generate_screenshots.py` using Pillow.
+
+### Test Evidence:
+- Full regression suite: **322 passed, 0 failures** in 84.26s across all 18 test suites.
+- Frontend build: `tsc && vite build` built `dist/` cleanly in 6.91s (0 errors).
 
 ---
 
