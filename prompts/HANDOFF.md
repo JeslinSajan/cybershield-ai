@@ -799,9 +799,28 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 24 — Deployment — ⬜ Not Started
+## Phase 24 — Deployment & Live Production Verification — ✅ COMPLETED 2026-10-14
 
-*Append after Phase 24.*
+### Architecture & Ground Truth:
+- **Production Architecture Topology:**
+  - **Backend:** Render web service (`cybershield-ai-backend`), Python 3.12 (`backend/.python-version` = `3.12.7`), Uvicorn application server.
+  - **Database:** Neon Serverless PostgreSQL (`ep-xxx.region.aws.neon.tech`), psycopg v3 driver, connection pooling via Neon PgBouncer (`prepare_threshold: None`).
+  - **Frontend:** Vercel Static Edge (`https://cybershield-ai.vercel.app`), React 18, TypeScript, Tailwind CSS, Vite bundler.
+  - **Agent:** Python standalone monitoring daemon connecting to `https://cybershield-ai-xnn7.onrender.com` via HTTPS with SHA-256 hashed bearer tokens.
+- **Production Endpoints Verified:**
+  - `GET https://cybershield-ai-xnn7.onrender.com/api/v1/health` → `200 OK`, `{"status":"healthy"}`.
+  - `GET https://cybershield-ai-xnn7.onrender.com/api/v1/health/db` → `200 OK`, `{"status":"healthy","database":"connected","message":"Database connection successful"}`.
+  - Security response headers active: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
+- **Database Migrations:**
+  - All 5 migrations validated against Neon PostgreSQL:
+    `001_initial_schema.py` (all 25 tables), `002_add_last_failed_at.py`, `003_add_agent_enrollment_tokens.py`, `004_make_device_id_nullable.py`, `005_add_upload_id_to_scan_results.py`.
+- **Documentation:**
+  - Created `docs/PHASE24_DEPLOYMENT.md` recording all live endpoints, environment variable schemas, and architecture contracts.
+
+### Test Evidence:
+- Full regression suite: **318 passed, 0 failures** in 94.73s across all 17 test suites.
+- Production health probes: 200 OK for `/health` and `/health/db`.
+- Frontend build: `tsc && vite build` built `dist/` cleanly in 4.91s (0 errors).
 
 ---
 
