@@ -107,6 +107,34 @@ async def lifespan(app: FastAPI):
 
     _asyncio.create_task(_mark_agents_offline())
 
+    async def _cleanup_stale_heartbeats():
+        """Background task: purges agent heartbeats older than 7 days (Phase 25)."""
+        from app.core.database import SessionLocal
+        from app.models.agent import AgentHeartbeat
+        from datetime import timedelta, datetime, timezone
+        while True:
+            try:
+                db = SessionLocal()
+                cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+                deleted = db.query(AgentHeartbeat).filter(
+                    AgentHeartbeat.created_at < cutoff
+                ).delete(synchronize_session=False)
+                if deleted:
+                    db.commit()
+                    logger.info(f"Heartbeat cleanup: deleted {deleted} rows older than 7 days.")
+                else:
+                    logger.debug("Heartbeat cleanup: 0 stale rows found.")
+            except Exception as e:
+                logger.error(f"Heartbeat cleanup error ({type(e).__name__}) — continuing")
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+            await _asyncio.sleep(86400)  # run once every 24 hours
+
+    _asyncio.create_task(_cleanup_stale_heartbeats())
+
     logger.info(f"{settings.APP_NAME} startup complete")
     
     yield

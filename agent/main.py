@@ -28,9 +28,29 @@ logging.basicConfig(
 logger = logging.getLogger("agent.main")
 
 
+def wait_for_backend(unauth_client: APIClient, max_retries: int = 10, retry_delay: int = 30) -> bool:
+    """Check backend reachability with retry logic (Phase 25)."""
+    for attempt in range(1, max_retries + 1):
+        resp = unauth_client.get("/health")
+        if resp is not None:
+            logger.info("Backend connection verified.")
+            return True
+        if attempt < max_retries:
+            logger.warning(f"Backend not reachable. Retry {attempt}/{max_retries} in {retry_delay}s...")
+            time.sleep(retry_delay)
+        else:
+            logger.error(f"Backend unreachable after {max_retries} retries. Exiting.")
+            sys.exit(1)
+    return False
+
+
 def main():
     logger.info("CyberShield Agent starting...")
     logger.info(f"Backend: {config.BACKEND_URL}")
+
+    # Check backend connectivity with startup retry loop (Phase 25)
+    unauth_client = APIClient(credential_token=None)
+    wait_for_backend(unauth_client)
 
     # Load or perform enrollment
     identity = load_identity()
@@ -38,7 +58,7 @@ def main():
         logger.info(f"Loaded existing identity. Agent ID: {identity['agent_id']}")
     else:
         logger.info("No identity found. Starting enrollment...")
-        identity = enroll(APIClient(credential_token=None))
+        identity = enroll(unauth_client)
         if identity is None:
             logger.error("Enrollment failed. Exiting.")
             sys.exit(1)

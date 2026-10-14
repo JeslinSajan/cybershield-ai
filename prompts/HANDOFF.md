@@ -824,9 +824,32 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 25 — Performance — ⬜ Not Started
+## Phase 25 — Performance & Reliability — ✅ COMPLETED 2026-10-14
 
-*Append after Phase 25.*
+### Architecture & Ground Truth:
+- **Heartbeat Table Maintenance (`backend/app/main.py`):**
+  - Background task `_cleanup_stale_heartbeats()` added to application lifespan.
+  - Automatically sweeps daily (86,400s interval) deleting rows in `agent_heartbeats` older than 7 days (`datetime.utcnow() - timedelta(days=7)`).
+  - Wrapped in fail-safe try/except blocks to guarantee zero disruption to core API operations.
+  - Keeps table bounded to a predictable ~20,000 rows per active agent maximum.
+- **Agent Startup Resilience (`agent/main.py`):**
+  - Implemented `wait_for_backend(api_client, max_retries=10, retry_delay=30)` startup handshake.
+  - If backend is offline or waking up from Render cold standby, logs structured retry messages: `"Backend not reachable. Retry N/10 in 30s..."`.
+  - Exits gracefully (`sys.exit(1)`) only after 10 consecutive connection failures (5 minutes of resilience window).
+- **List Endpoint Pagination Audit:**
+  - Verified pagination parameters (`limit=50` default, max 200, `offset=0`) across all list endpoints:
+    `GET /devices/`, `GET /alerts/`, `GET /logs/`, `GET /vulnerabilities/`, `GET /agents/`, `GET /threat-intelligence/`, `GET /reports/`, `GET /notifications/`, `GET /audit-logs/`.
+- **Frontend Real-time Situational Awareness & Auto-Refresh:**
+  - Auto-refresh active across critical dashboards:
+    - Main Dashboard metrics & recent alerts: 60s interval.
+    - Agents monitoring page: 30s interval.
+    - TopBar live notification bell count: 30s interval.
+  - Complete loading indicators, empty data placeholders, and error envelopes implemented across all 13 pages.
+
+### Test Evidence:
+- Added `tests/test_performance_and_reliability.py` (4 tests passed).
+- Full regression suite: **322 passed, 0 failures** in 84.26s across all 18 test suites.
+- Frontend build: `tsc && vite build` built `dist/` cleanly in 6.91s (0 errors).
 
 ---
 
