@@ -23,9 +23,12 @@ from app.core.config import get_settings
 from app.core.database import init_db, close_db
 from app.core.logging import configure_logging
 from app.core.exceptions import CyberShieldException, ErrorResponse
+from app.core.limiter import limiter
 from app.core.seed import seed_roles_and_admin
 from app.api.v1.router import router as api_v1_router
 from app.schemas import RootResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # Configure logging early
 logger = configure_logging()
@@ -123,6 +126,20 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Rate Limiting configuration (Phase 22)
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+# Security Response Headers Middleware (Phase 22)
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Enforce secure HTTP response headers across all responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
 # Configure CORS if origins are specified
 if settings.CORS_ORIGINS:
     try:
@@ -151,6 +168,21 @@ else:
 
 
 # Exception handlers
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    """Handle rate limit exceeded with canonical error envelope (Phase 22)."""
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": {
+                "code": "RATE_LIMITED",
+                "message": "Too many requests. Try again later.",
+                "details": [],
+            }
+        },
+    )
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle FastAPI HTTPExceptions.
@@ -186,9 +218,12 @@ async def cybershield_exception_handler(request: Request, exc: CyberShieldExcept
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    """Handle unexpected exceptions."""
+    """Handle unexpected exceptions.
+    
+    In production, never expose stack traces or exception details (Phase 22).
+    """
     logger.error(f"Unexpected error: {str(exc)}", exc_info=True)
-    details = [f"{type(exc).__name__}: {str(exc)}"] if (settings.DEBUG or settings.ENVIRONMENT != "production") else []
+    details = [f"{type(exc).__name__}: {str(exc)}"] if (settings.DEBUG and settings.ENVIRONMENT != "production") else []
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ErrorResponse.to_dict(

@@ -161,7 +161,7 @@ async def create_user(
         )
 
     new_user = User(
-        organization_id=body.organization_id,
+        organization_id=current_user.organization_id,
         role_id=body.role_id,
         email=body.email,
         username=body.username,

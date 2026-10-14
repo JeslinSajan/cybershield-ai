@@ -734,9 +734,33 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:5173,...
 
 ---
 
-## Phase 22 — Security Hardening — ⬜ Not Started
+## Phase 22 — Security Hardening — ✅ COMPLETED 2026-10-14
 
-*Append after Phase 22.*
+### Architecture & Ground Truth:
+- **Rate Limiting (`backend/app/core/limiter.py` & `backend/app/main.py`):**
+  - Dependency: pinned `slowapi==0.1.9` in `backend/requirements.txt`.
+  - Rate limiting applied to `POST /api/v1/auth/login` only: `10 requests per minute per IP` using `@limiter.limit("10/minute")`.
+  - On limit exceed: HTTP 429 Too Many Requests with canonical error envelope:
+    `{"error": {"code": "RATE_LIMITED", "message": "Too many requests. Try again later.", "details": []}}`.
+- **Security Response Headers Middleware (`backend/app/main.py`):**
+  - Applied globally via FastAPI HTTP middleware:
+    - `X-Content-Type-Options: nosniff`
+    - `X-Frame-Options: DENY`
+    - `Referrer-Policy: strict-origin-when-cross-origin`
+- **Production Error Message Sanitization (`backend/app/main.py`):**
+  - General exception handler updated to ensure `details = []` and no stack trace or internal exception details are exposed in production (`ENVIRONMENT == "production"` or `not DEBUG`).
+- **Organization Isolation Audit:**
+  - Verified tenant data boundary on all list and resource queries: `devices`, `alerts`, `logs`, `vulnerabilities`, `scans`, `reports`, `settings`, `threat-intelligence`, `notifications`.
+  - Hardened `POST /api/v1/users/` to strictly enforce `organization_id = current_user.organization_id`, preventing cross-tenant user creation.
+- **Audit Log Completeness (`backend/app/api/v1/auth.py`):**
+  - Added `AuditLog(action="user_login")` on successful authentication.
+  - Added `AuditLog(action="user_login_failed")` on rejected authentication attempts with failure count.
+  - Verified presence of all required actions: `user_login`, `user_login_failed`, `agent_enrolled`, `agent_revoked`, `scan_created`, `alert_status_changed`, `report_generated`, `setting_updated`.
+
+### Test Evidence:
+- `tests/test_security_hardening.py`: 9 passed, 0 failures.
+- Full regression suite: **310 passed, 0 failures** in 94.35s across all phases.
+- Frontend build: `tsc && vite build` built `dist/` cleanly in 4.91s (0 errors).
 
 ---
 

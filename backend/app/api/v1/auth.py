@@ -19,14 +19,16 @@ Lockout policy (FR-1.5):
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.core.security import create_access_token, verify_password
 from app.models.organization import Role
+from app.models.system import AuditLog
 from app.models.user import User
 from app.schemas.auth import LoginRequest, LoginResponse, MeResponse, UserInToken
 
@@ -65,8 +67,10 @@ def _is_within_lockout_window(last_failed_at: datetime | None) -> bool:
         "Passwords are never logged or returned (FR-1.2)."
     ),
 )
+@limiter.limit("10/minute")
 async def login(
-    request: LoginRequest,
+    request: Request,
+    body: LoginRequest,
     db: Annotated[Session, Depends(get_db)],
 ) -> LoginResponse:
     # ------------------------------------------------------------------
@@ -74,7 +78,7 @@ async def login(
     # ------------------------------------------------------------------
     user: User | None = (
         db.query(User)
-        .filter(User.email == request.email, User.deleted_at.is_(None))
+        .filter(User.email == body.email, User.deleted_at.is_(None))
         .first()
     )
 
@@ -96,7 +100,7 @@ async def login(
         # (prevents user enumeration via response time differences).
         # This is a real bcrypt hash of "dummy" — it's not a secret.
         _DUMMY_HASH = "$2b$12$3bM.1ySmbgfLQ4bMFKauE.0GY0NHs6VV9wNJg1/zUYN3d4OZi/QDW"
-        verify_password(request.password, _DUMMY_HASH)
+        verify_password(body.password, _DUMMY_HASH)
         raise invalid_credentials_exc
 
     # ------------------------------------------------------------------
@@ -141,7 +145,7 @@ async def login(
     # ------------------------------------------------------------------
     # 4. Verify password
     # ------------------------------------------------------------------
-    password_ok = verify_password(request.password, user.password_hash)
+    password_ok = verify_password(body.password, user.password_hash)
 
     if not password_ok:
         # FR-1.5: track failures
@@ -153,6 +157,18 @@ async def login(
             user.failed_login_count += 1
 
         user.last_failed_at = datetime.now(timezone.utc)
+
+        # Audit log for failed login (Phase 22)
+        audit = AuditLog(
+            organization_id=user.organization_id,
+            actor_type="user",
+            actor_id=user.id,
+            action="user_login_failed",
+            target_type="users",
+            target_id=user.id,
+            details={"email": user.email, "failed_count": user.failed_login_count},
+        )
+        db.add(audit)
         db.commit()
 
         logger.info(f"Failed login attempt (count now {user.failed_login_count})")
@@ -164,6 +180,18 @@ async def login(
     user.failed_login_count = 0
     user.last_failed_at = None
     user.last_login_at = datetime.now(timezone.utc)
+
+    # Audit log for successful login (Phase 22)
+    audit = AuditLog(
+        organization_id=user.organization_id,
+        actor_type="user",
+        actor_id=user.id,
+        action="user_login",
+        target_type="users",
+        target_id=user.id,
+        details={"email": user.email},
+    )
+    db.add(audit)
     db.commit()
     db.refresh(user)
 

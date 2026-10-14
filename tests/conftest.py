@@ -151,3 +151,15 @@ def db_session(create_tables):
         yield db
     finally:
         db.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter(request):
+    """Reset rate limiter before each test to prevent cross-test rate limit collision, except in test_security_hardening."""
+    if "test_security_hardening" not in request.node.nodeid:
+        from app.core.limiter import limiter
+        try:
+            limiter.reset()
+        except Exception:
+            pass
+
