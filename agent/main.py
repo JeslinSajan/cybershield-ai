@@ -7,8 +7,10 @@ CyberShield backend every HEARTBEAT_INTERVAL seconds.
 IMPORTANT: This is NOT an AI agent. It is a Python monitoring script.
 """
 
+import concurrent.futures
 import logging
 import sys
+import threading
 import time
 
 from agent import config
@@ -44,6 +46,31 @@ def wait_for_backend(unauth_client: APIClient, max_retries: int = 10, retry_dela
     return False
 
 
+def _run_task_wrapper(
+    task: dict,
+    api_client: APIClient,
+    offline_queue: OfflineQueue,
+    active_task_ids: set,
+    lock: threading.Lock,
+):
+    """Execute a task in a background worker thread, ensuring active task set cleanup."""
+    task_id = task.get("id")
+    try:
+        handle_task(task, api_client, offline_queue)
+    except Exception as e:
+        logger.error(f"Task {task_id} failed with unhandled exception: {e}")
+        try:
+            api_client.post(
+                f"/agents/tasks/{task_id}/status",
+                {"status": "FAILED", "details": {"error": str(e)}},
+            )
+        except Exception:
+            pass
+    finally:
+        with lock:
+            active_task_ids.discard(task_id)
+
+
 def main():
     logger.info("CyberShield Agent starting...")
     logger.info(f"Backend: {config.BACKEND_URL}")
@@ -72,58 +99,90 @@ def main():
     offline_queue = OfflineQueue(queue_dir=".")
     logger.info(f"Offline queue initialized with {len(offline_queue)} items")
 
+    # Bounded background task execution (prevents heartbeat starvation)
+    task_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="agent-task")
+    active_task_ids = set()
+    active_tasks_lock = threading.Lock()
+
     logger.info(f"Starting loop (heartbeat: {config.HEARTBEAT_INTERVAL}s, tasks: {config.TASK_POLL_INTERVAL}s)")
-    
+
     last_heartbeat = 0
     last_task_poll = 0
     last_queue_drain = 0
     last_log_collect = 0
     QUEUE_DRAIN_INTERVAL = 60  # Try to drain queue every 60 seconds
-    
-    while True:
-        now = time.time()
-        
-        # Heartbeat
-        if now - last_heartbeat >= config.HEARTBEAT_INTERVAL:
-            send_heartbeat(api_client, identity["agent_id"])
-            if not api_client._credential_valid:
-                logger.error("Credential rejected — contact admin to revoke and re-enroll.")
-                sys.exit(1)
-            last_heartbeat = time.time()
-            
-        # Queue drain - attempt to send queued results
-        if now - last_queue_drain >= QUEUE_DRAIN_INTERVAL:
-            if not offline_queue.is_empty:
-                logger.info("Attempting to drain offline queue...")
-                drained = offline_queue.drain(api_client)
-                if drained > 0:
-                    logger.info(f"Drained {drained} items from queue")
-            last_queue_drain = time.time()
-            
-        # Tasks
-        if now - last_task_poll >= config.TASK_POLL_INTERVAL:
-            tasks = poll_tasks(api_client)
-            for task in tasks:
-                handle_task(task, api_client, offline_queue)
-            if not api_client._credential_valid:
-                logger.error("Credential rejected — contact admin to revoke and re-enroll.")
-                sys.exit(1)
-            last_task_poll = time.time()
 
-        # Log collection
-        if now - last_log_collect >= config.LOG_COLLECT_INTERVAL:
-            try:
-                sent_count = collect_and_send_logs(api_client, identity["agent_id"])
-                if sent_count > 0:
-                    logger.info(f"Collected and transmitted {sent_count} log entries")
-            except Exception as e:
-                logger.warning(f"Error during log collection: {e}")
-            if not api_client._credential_valid:
-                logger.error("Credential rejected — contact admin to revoke and re-enroll.")
-                sys.exit(1)
-            last_log_collect = time.time()
-            
-        time.sleep(1)
+    try:
+        while True:
+            now = time.time()
+
+            # Heartbeat (scheduled on main loop — never starved by scans)
+            if now - last_heartbeat >= config.HEARTBEAT_INTERVAL:
+                send_heartbeat(api_client, identity["agent_id"])
+                if not api_client._credential_valid:
+                    logger.error("Credential rejected — contact admin to revoke and re-enroll.")
+                    sys.exit(1)
+                last_heartbeat = time.time()
+
+            # Queue drain - attempt to send queued results/logs
+            if now - last_queue_drain >= QUEUE_DRAIN_INTERVAL:
+                if not offline_queue.is_empty:
+                    logger.info("Attempting to drain offline queue...")
+                    drained = offline_queue.drain(api_client)
+                    if drained > 0:
+                        logger.info(f"Drained {drained} items from queue")
+                last_queue_drain = time.time()
+
+            # Tasks - dispatch to background thread pool
+            if now - last_task_poll >= config.TASK_POLL_INTERVAL:
+                tasks = poll_tasks(api_client)
+                for task in tasks:
+                    task_id = task.get("id")
+                    if not task_id:
+                        continue
+                    with active_tasks_lock:
+                        if task_id in active_task_ids:
+                            logger.info(f"Task {task_id} already in progress; skipping duplicate dispatch.")
+                            continue
+                        active_task_ids.add(task_id)
+
+                    task_executor.submit(
+                        _run_task_wrapper,
+                        task,
+                        api_client,
+                        offline_queue,
+                        active_task_ids,
+                        active_tasks_lock,
+                    )
+
+                if not api_client._credential_valid:
+                    logger.error("Credential rejected — contact admin to revoke and re-enroll.")
+                    sys.exit(1)
+                last_task_poll = time.time()
+
+            # Log collection - buffered to offline queue on network drops
+            if now - last_log_collect >= config.LOG_COLLECT_INTERVAL:
+                try:
+                    sent_count = collect_and_send_logs(
+                        api_client,
+                        identity["agent_id"],
+                        offline_queue=offline_queue,
+                    )
+                    if sent_count > 0:
+                        logger.info(f"Collected and processed {sent_count} log entries")
+                except Exception as e:
+                    logger.warning(f"Error during log collection: {e}")
+                if not api_client._credential_valid:
+                    logger.error("Credential rejected — contact admin to revoke and re-enroll.")
+                    sys.exit(1)
+                last_log_collect = time.time()
+
+            time.sleep(1)
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("CyberShield Agent shutting down...")
+    finally:
+        task_executor.shutdown(wait=False, cancel_futures=True)
+        logger.info("Agent shutdown complete.")
 
 
 if __name__ == "__main__":

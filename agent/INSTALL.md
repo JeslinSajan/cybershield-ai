@@ -38,6 +38,12 @@
 5. The agent will enroll on first run and save its identity to `agent_identity.json`.
    **Never commit `agent_identity.json` to git.**
 
+## Service Setup (System Daemon)
+
+For running the CyberShield Agent continuously in the background across reboots:
+- **Linux (systemd)**: Use the provided `agent/cybershield-agent.service` unit file and `./install_service.sh` script.
+- **Windows (Task Scheduler / NSSM)**: See [`SERVICE_SETUP.md`](./SERVICE_SETUP.md) for full instructions.
+
 ## Security Note
 
 - `agent_identity.json` contains the agent credential token. Keep it secure.

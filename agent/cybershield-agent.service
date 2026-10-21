@@ -1,0 +1,43 @@
+[Unit]
+Description=CyberShield AI Endpoint Security Monitoring Agent
+Documentation=https://github.com/JeslinSajan/cybershield-ai
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cybershield
+Group=cybershield
+WorkingDirectory=/opt/cybershield-agent
+ExecStart=/opt/cybershield-agent/venv/bin/python -m agent.main
+Restart=on-failure
+RestartSec=10s
+
+# Environment configuration
+EnvironmentFile=-/opt/cybershield-agent/.env
+Environment=PYTHONUNBUFFERED=1
+
+# Security and Sandboxing Directives
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Writable state directory for agent_identity.json, offline_queue.json, and state
+ReadWritePaths=/opt/cybershield-agent
+
+# Minimal capabilities (raw network access for ARP/ICMP scanning without full root)
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_RAW
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cybershield-agent
+
+[Install]
+WantedBy=multi-user.target

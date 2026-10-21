@@ -129,6 +129,7 @@ class LogEntryItem(BaseModel):
 
 class LogIngestRequest(BaseModel):
     logs: List[LogEntryItem] = Field(..., min_length=1)
+    upload_id: Optional[str] = Field(None, max_length=36)
 
 
 # ---------------------------------------------------------------------------
@@ -773,6 +774,10 @@ async def rotate_credential(
     return {
         "agent_id": str(agent.id),
         "credential_id": str(new_cred.id),
+        "credential": {
+            "token": raw_credential,
+            "expires_at": new_cred.expires_at.isoformat(),
+        },
         "expires_at": new_cred.expires_at.isoformat(),
         "is_active": True
     }

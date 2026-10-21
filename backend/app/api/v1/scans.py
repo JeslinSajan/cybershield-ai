@@ -1,5 +1,7 @@
 """Scan routes for network and device scanning tasks."""
 
+import ipaddress
+import re
 import uuid
 from typing import Annotated, Literal, Optional
 
@@ -15,6 +17,146 @@ from app.models.system import AuditLog
 from app.models.user import User
 
 router = APIRouter()
+
+HOSTNAME_REGEX = re.compile(
+    r"^(?=.{1,253}$)(?!-)[a-zA-Z0-9-]{1,63}(?<!-)(\.(?!-)[a-zA-Z0-9-]{1,63}(?<!-))*$"
+)
+FORBIDDEN_CHARS = set(" \t\r\n;&|`$><\\\"'*?")
+
+
+def validate_target_scope(scope: str) -> str:
+    """Validate target scope against Nmap argument injection and invalid formats.
+
+    Allowed:
+      - 'local' or '{}' (internal local discovery / health check)
+      - IPv4 address (e.g. 192.168.1.1)
+      - IPv6 address (e.g. ::1)
+      - IPv4 CIDR with prefixlen >= 16 (e.g. 192.168.1.0/24)
+      - IPv6 CIDR with prefixlen >= 64
+      - Valid Hostname / FQDN (e.g. scanme.nmap.org, localhost)
+
+    Rejected:
+      - Begins with '-' (Nmap argument injection prevention)
+      - Contains whitespace or shell metacharacters
+      - Overly broad CIDRs (e.g. 0.0.0.0/0, 10.0.0.0/8)
+      - Invalid syntax
+    """
+    if not scope:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Target scope cannot be empty.",
+                    "details": [],
+                }
+            },
+        )
+
+    scope_stripped = scope.strip()
+
+    if scope_stripped.startswith("-"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Target scope cannot begin with '-' (option injection disallowed).",
+                    "details": [],
+                }
+            },
+        )
+
+    if any(c in FORBIDDEN_CHARS for c in scope_stripped):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Target scope contains invalid characters or whitespace.",
+                    "details": [],
+                }
+            },
+        )
+
+    if scope_stripped in ("local", "{}"):
+        return scope_stripped
+
+    # Check for IP address
+    try:
+        ipaddress.ip_address(scope_stripped)
+        return scope_stripped
+    except ValueError:
+        pass
+
+    # If it resembles an IPv4 address (4 numeric octets separated by dots) but failed validation, reject
+    if re.match(r"^\d+(\.\d+){3}$", scope_stripped):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Invalid IPv4 address: '{scope_stripped}'.",
+                    "details": [],
+                }
+            },
+        )
+
+    # Check for CIDR network
+    if "/" in scope_stripped:
+        try:
+            net = ipaddress.ip_network(scope_stripped, strict=False)
+            if isinstance(net, ipaddress.IPv4Network) and net.prefixlen < 16:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "message": "IPv4 CIDR prefix must be /16 or smaller (/16 to /32).",
+                            "details": [],
+                        }
+                    },
+                )
+            if isinstance(net, ipaddress.IPv6Network) and net.prefixlen < 64:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "error": {
+                            "code": "VALIDATION_ERROR",
+                            "message": "IPv6 CIDR prefix must be /64 or smaller (/64 to /128).",
+                            "details": [],
+                        }
+                    },
+                )
+            return scope_stripped
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": f"Invalid CIDR notation: '{scope_stripped}'.",
+                        "details": [],
+                    }
+                },
+            )
+
+    # Check for Hostname (RFC 1123: labels up to 63 chars, TLD must not be all-numeric)
+    labels = scope_stripped.split(".")
+    if (len(labels) > 1 and not labels[-1].isdigit()) or (len(labels) == 1 and not labels[0].isdigit()):
+        if HOSTNAME_REGEX.match(scope_stripped):
+            return scope_stripped
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": f"Invalid target scope format: '{scope_stripped}'. Must be an IP, valid CIDR, or hostname.",
+                "details": [],
+            }
+        },
+    )
 
 
 class CreateTaskRequest(BaseModel):
@@ -124,13 +266,15 @@ async def start_scan(
             },
         )
 
+    validated_target = validate_target_scope(body.target_scope)
+
     task = Scan(
         organization_id=current_user.organization_id,
         agent_id=agent.id,
         created_by_user_id=current_user.id,
         scan_type=body.scan_type,
         status="PENDING",
-        target_scope=body.target_scope,
+        target_scope=validated_target,
     )
     db.add(task)
     db.flush()

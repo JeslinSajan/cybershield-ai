@@ -56,16 +56,32 @@ def _resolve_hostname(ip: str) -> Optional[str]:
         return None
 
 
+def is_safe_target(target: str) -> bool:
+    """Validate that target network or host does not contain option injection or shell characters."""
+    if not target:
+        return False
+    target = target.strip()
+    if target.startswith("-"):
+        return False
+    if any(c in " \t\r\n;&|`$><\\\"'*?" for c in target):
+        return False
+    return True
+
+
 def _scan_with_nmap(target_network: str) -> Optional[List[dict]]:
     """Scan using Nmap if python-nmap and nmap binary are available."""
     if not shutil.which("nmap"):
         return None
 
+    target = target_network if target_network and target_network != "local" else "127.0.0.1"
+    if not is_safe_target(target):
+        logger.warning(f"Unsafe target rejected for network scan: '{target}'")
+        return None
+
     try:
         import nmap
         nm = nmap.PortScanner()
-        args = "-sn"
-        target = target_network if target_network and target_network != "local" else "127.0.0.1"
+        args = "-sn --"
         nm.scan(hosts=target, arguments=args)
         hosts = []
         for host in nm.all_hosts():
@@ -143,6 +159,10 @@ def discover_devices(target_network: str = "local") -> dict:
     Main discovery entry point.
     Discovers devices on the target scope and returns a structured dictionary.
     """
+    if target_network and target_network != "local" and not is_safe_target(target_network):
+        logger.warning(f"Unsafe target network scope rejected: '{target_network}'")
+        return {"target_network": target_network, "hosts": []}
+
     logger.info(f"Starting device discovery for scope: {target_network}")
     hosts = _scan_with_nmap(target_network)
     if hosts is None:

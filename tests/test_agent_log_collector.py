@@ -6,6 +6,7 @@ Tests Linux auth.log parsing, Windows fallback handling, state tracking, and log
 import os
 import sys
 import tempfile
+import uuid
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -194,7 +195,7 @@ class TestCollectAndSendLogs:
             )
             assert sent == 0
 
-            # State timestamp must NOT be advanced when backend fails
+            # State timestamp must NOT be advanced when backend fails without offline queue
             saved_ts = load_last_sent_timestamp(state_path)
             assert saved_ts is None
         finally:
@@ -202,3 +203,94 @@ class TestCollectAndSendLogs:
                 os.remove(log_path)
             if os.path.exists(state_path):
                 os.remove(state_path)
+
+    def test_collect_and_send_buffers_in_offline_queue_on_failure(self):
+        from agent.offline_queue import OfflineQueue
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as lf:
+            lf.write("2026-10-09T10:00:00+00:00 host sshd[1]: Failed password for u1 from 1.1.1.1 port 22\n")
+            log_path = lf.name
+
+        state_path = os.path.join(tempfile.gettempdir(), f"state_{uuid.uuid4().hex}.json")
+        queue_path = os.path.join(tempfile.gettempdir(), f"queue_{uuid.uuid4().hex}.json")
+
+        try:
+            queue = OfflineQueue(queue_file=queue_path)
+            mock_client = MagicMock()
+            mock_client.post.return_value = None  # Backend unreachable
+
+            sent = collect_and_send_logs(
+                mock_client,
+                agent_id="test-agent",
+                state_file=state_path,
+                log_file_override=log_path,
+                offline_queue=queue,
+            )
+            assert sent == 1
+            assert queue.size == 1
+
+            # Verify queue item details
+            items = queue.peek()
+            assert len(items) == 1
+            item = items[0]
+            assert item["method"] == "post"
+            assert item["path"] == "/agents/logs"
+            assert len(item["data"]["logs"]) == 1
+            assert "upload_id" in item["data"]
+
+            # Timestamp should be advanced so subsequent scans don't duplicate
+            saved_ts = load_last_sent_timestamp(state_path)
+            assert saved_ts == datetime(2026, 10, 9, 10, 0, 0, tzinfo=timezone.utc)
+
+            # Subsequent collection returns 0 and does not grow the queue
+            sent_again = collect_and_send_logs(
+                mock_client,
+                agent_id="test-agent",
+                state_file=state_path,
+                log_file_override=log_path,
+                offline_queue=queue,
+            )
+            assert sent_again == 0
+            assert queue.size == 1
+
+            # When backend recovers, queue drains successfully
+            mock_client.post.return_value = {"ingested_count": 1, "log_ids": ["abc-123"]}
+            drained = queue.drain(mock_client)
+            assert drained == 1
+            assert queue.size == 0
+
+        finally:
+            for p in (log_path, state_path, queue_path):
+                if os.path.exists(p):
+                    os.remove(p)
+
+    def test_offline_queue_file_persistence_across_instances(self):
+        from agent.offline_queue import OfflineQueue
+
+        queue_path = os.path.join(tempfile.gettempdir(), f"queue_{uuid.uuid4().hex}.json")
+
+        try:
+            q1 = OfflineQueue(queue_file=queue_path)
+            q1.enqueue({
+                "method": "post",
+                "path": "/agents/logs",
+                "data": {"logs": [{"source": "test", "event_type": "login_failure"}], "upload_id": "up-1"},
+            })
+            assert q1.size == 1
+
+            # Create second queue instance pointing to same file
+            q2 = OfflineQueue(queue_file=queue_path)
+            assert q2.size == 1
+
+            mock_client = MagicMock()
+            mock_client.post.return_value = {"ingested_count": 1}
+            drained = q2.drain(mock_client)
+            assert drained == 1
+            assert q2.size == 0
+
+            # Verify on disk
+            q3 = OfflineQueue(queue_file=queue_path)
+            assert q3.size == 0
+        finally:
+            if os.path.exists(queue_path):
+                os.remove(queue_path)

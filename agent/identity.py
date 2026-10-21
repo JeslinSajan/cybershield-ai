@@ -27,3 +27,12 @@ def save_identity(agent_id: str, credential_token: str) -> None:
         os.chmod(IDENTITY_FILE, 0o600)
     except (OSError, AttributeError):
         pass
+
+
+def update_credential(credential_token: str) -> bool:
+    """Update credential token for an existing enrolled agent identity."""
+    identity = load_identity()
+    if not identity or not identity.get("agent_id"):
+        return False
+    save_identity(identity["agent_id"], credential_token)
+    return True

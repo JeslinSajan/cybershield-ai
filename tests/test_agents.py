@@ -853,10 +853,18 @@ class TestRotateCredential:
         
         data = resp.json()
         assert "credential_id" in data
+        assert "credential" in data
+        assert "token" in data["credential"]
+        new_token = data["credential"]["token"]
+        assert len(new_token) > 20
         
         # Test old token doesn't work
         resp = client.get("/api/v1/agents/tasks", headers={"Authorization": f"Bearer {raw_token}"})
         assert resp.status_code == 401
+
+        # Test new token works for agent API
+        resp = client.get("/api/v1/agents/tasks", headers={"Authorization": f"Bearer {new_token}"})
+        assert resp.status_code == 200
 
 
 class TestNetworkStats:

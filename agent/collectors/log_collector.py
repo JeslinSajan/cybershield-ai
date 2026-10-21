@@ -253,8 +253,9 @@ def collect_and_send_logs(
     agent_id: Optional[str] = None,
     state_file: Optional[str] = None,
     log_file_override: Optional[str] = None,
+    offline_queue: Optional[object] = None,
 ) -> int:
-    """Collect new security logs and transmit them to the backend."""
+    """Collect new security logs and transmit them to the backend, with offline queue buffering."""
     last_ts = load_last_sent_timestamp(state_file)
     logs = collect_logs(since_timestamp=last_ts, log_file_override=log_file_override)
     if not logs:
@@ -273,5 +274,34 @@ def collect_and_send_logs(
             max_ts = max(timestamps)
             save_last_sent_timestamp(max_ts, state_file)
         return ingested
+
+    # Network / backend failure — buffer in offline queue if available
+    if offline_queue is not None:
+        import uuid
+        upload_id = str(uuid.uuid4())
+        item = {
+            "method": "post",
+            "path": "/agents/logs",
+            "data": {
+                "logs": logs,
+                "upload_id": upload_id,
+            },
+        }
+        queued = offline_queue.enqueue(item)
+        if queued:
+            logger.warning(
+                f"Log transmission failed — buffered {len(logs)} log entries in offline queue (upload_id: {upload_id})"
+            )
+            timestamps = [
+                datetime.fromisoformat(l["timestamp"])
+                for l in logs
+                if l.get("timestamp")
+            ]
+            if timestamps:
+                max_ts = max(timestamps)
+                save_last_sent_timestamp(max_ts, state_file)
+            return len(logs)
+        else:
+            logger.warning("Failed to buffer logs — offline queue rejected item.")
 
     return 0
