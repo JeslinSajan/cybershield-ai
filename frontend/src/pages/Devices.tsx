@@ -32,7 +32,7 @@ export function Devices() {
   const [isScanModalOpen, setIsScanModalOpen] = useState<boolean>(false);
   const [onlineAgents, setOnlineAgents] = useState<Agent[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
-  const [targetScope, setTargetScope] = useState<string>('192.168.1.0/24');
+  const [targetScope, setTargetScope] = useState<string>('local');
   const [authorizedConsent, setAuthorizedConsent] = useState<boolean>(false);
   const [isStartingScan, setIsStartingScan] = useState<boolean>(false);
   const [scanMessage, setScanMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -52,6 +52,8 @@ export function Devices() {
 
   useEffect(() => {
     fetchDevices();
+    const interval = setInterval(fetchDevices, 15000);
+    return () => clearInterval(interval);
   }, [fetchDevices]);
 
   const handleOpenDetails = async (device: Device) => {
@@ -401,11 +403,13 @@ export function Devices() {
               type="text"
               value={targetScope}
               onChange={(e) => setTargetScope(e.target.value)}
-              placeholder="e.g. 192.168.1.0/24 or 10.0.0.1-50"
+              placeholder="e.g. local or 10.191.156.0/24 or 192.168.1.0/24"
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
               required
             />
-            <p className="text-[11px] text-slate-500 mt-1">Specify an authorized subnet CIDR or IP range reachable by the chosen agent.</p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Use <code className="text-cyan-400">local</code> to discover hosts via ARP and local interfaces, or enter a subnet CIDR (e.g. 10.191.156.0/24).
+            </p>
           </div>
 
           <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-lg text-xs space-y-2">
