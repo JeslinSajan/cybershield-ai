@@ -2,13 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #0f172a;
-  color: #e2e8f0;
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    font-display: swap;
+    text-rendering: optimizeSpeed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #020617;
+    color: #e2e8f0;
+  }
+
+  /* Prioritize text rendering and prevent invisible text during font loading */
+  p, h1, h2, h3, h4, h5, h6, span {
+    font-display: swap;
+  }
+}
+
+/* Optimization for below-the-fold content to minimize initial layout work */
+.contain-content {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
 }

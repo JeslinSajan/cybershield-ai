@@ -24,7 +24,7 @@ export function Card({
           <div>
             {title && <h3 className="text-base font-bold text-slate-100">{title}</h3>}
             {description && (
-              <p className="text-xs text-slate-400 mt-0.5">{description}</p>
+              <p className="description text-xs text-slate-400 mt-0.5">{description}</p>
             )}
           </div>
           {action && <div>{action}</div>}

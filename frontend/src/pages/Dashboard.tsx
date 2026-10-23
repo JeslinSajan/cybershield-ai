@@ -22,6 +22,13 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [chartsMounted, setChartsMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Defer chart mounting by one frame so LCP text and KPI cards paint immediately without forced layout reflow
+    const timer = setTimeout(() => setChartsMounted(true), 20);
+    return () => clearTimeout(timer);
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
@@ -97,7 +104,7 @@ export function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-800">
         <div>
           <h2 className="text-xl font-bold text-slate-100 tracking-tight">Security Overview</h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="description text-xs text-slate-400 mt-0.5">
             Real-time platform telemetry across monitored endpoints, networks, and vulnerability scans.
           </p>
         </div>
@@ -231,7 +238,11 @@ export function Dashboard() {
           title="Vulnerability Distribution by Severity"
           description="Live tally from Nmap service banners matched against the CVE database"
         >
-          {vulns.length === 0 ? (
+          {!chartsMounted ? (
+            <div className="h-56 w-full flex items-center justify-center text-slate-600 text-xs font-mono">
+              Initializing vulnerability metrics...
+            </div>
+          ) : vulns.length === 0 ? (
             <div className="h-56 flex items-center justify-center text-slate-500 text-xs">
               No vulnerabilities identified. Run a vulnerability scan on discovered devices.
             </div>
@@ -260,7 +271,11 @@ export function Dashboard() {
           title="Agent Fleet Health Breakdown"
           description="Current status of deployed Python monitoring agents"
         >
-          {agents.length === 0 ? (
+          {!chartsMounted ? (
+            <div className="h-56 w-full flex items-center justify-center text-slate-600 text-xs font-mono">
+              Initializing agent fleet metrics...
+            </div>
+          ) : agents.length === 0 ? (
             <div className="h-56 flex items-center justify-center text-slate-500 text-xs">
               No agents registered. Generate an enrollment token in the Agents page to connect a machine.
             </div>
@@ -292,7 +307,7 @@ export function Dashboard() {
       </div>
 
       {/* Recent Security Activity & Logs */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 contain-content">
         {/* Live Logs Stream */}
         <div className="lg:col-span-2">
           <Card
