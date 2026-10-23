@@ -19,35 +19,28 @@ export function TopBar() {
   useEffect(() => {
     let isMounted = true;
 
+    // Combined health check: single endpoint /health/db verifies both app and database
     const checkStatuses = async () => {
-      try {
-        const appRes = await healthService.checkHealth();
-        if (isMounted) {
-          setAppHealth(appRes.status === 'healthy' ? 'healthy' : 'error');
-        }
-      } catch {
-        if (isMounted) setAppHealth('error');
-      }
-
       try {
         const dbRes = await healthService.checkDatabaseHealth();
         if (isMounted) {
+          setAppHealth(dbRes.status === 'healthy' ? 'healthy' : 'error');
           setDbHealth(dbRes.database === 'connected' ? 'connected' : 'disconnected');
         }
       } catch {
-        if (isMounted) setDbHealth('disconnected');
+        if (isMounted) {
+          setAppHealth('error');
+          setDbHealth('disconnected');
+        }
       }
     };
 
-    const fetchNotificationsData = async () => {
+    // Fast unread count: returns a single integer without fetching full list payload
+    const fetchUnreadCount = async () => {
       try {
-        const [count, list] = await Promise.all([
-          notificationsService.getUnreadCount(),
-          notificationsService.listNotifications({ limit: 10 }),
-        ]);
+        const count = await notificationsService.getUnreadCount();
         if (isMounted) {
           setUnreadCount(count);
-          setNotifications(list);
         }
       } catch {
         // silent fallback
@@ -55,18 +48,33 @@ export function TopBar() {
     };
 
     checkStatuses();
-    fetchNotificationsData();
+    fetchUnreadCount();
 
     const interval = setInterval(() => {
       checkStatuses();
-      fetchNotificationsData();
-    }, 30000);
+      fetchUnreadCount();
+    }, 45000);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
   }, []);
+
+  // Fetch full notification list lazily only when dropdown is opened
+  useEffect(() => {
+    if (!isNotifOpen) return;
+    let isMounted = true;
+    notificationsService
+      .listNotifications({ limit: 10 })
+      .then((list) => {
+        if (isMounted) setNotifications(list);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [isNotifOpen]);
 
   // Close dropdown on outside click
   useEffect(() => {

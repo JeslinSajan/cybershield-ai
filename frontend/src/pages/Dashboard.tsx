@@ -9,6 +9,7 @@ import { devicesService, Device } from '../services/devicesService';
 import { vulnerabilitiesService, Vulnerability } from '../services/vulnerabilitiesService';
 import { scansService, Scan } from '../services/scansService';
 import { logsService, LogEntry } from '../services/logsService';
+import { dashboardService } from '../services/dashboardService';
 import { Link } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie } from 'recharts';
 
@@ -26,22 +27,34 @@ export function Dashboard() {
     setIsLoading(true);
     setError(null);
     try {
-      const [agentsData, devicesData, vulnsData, scansData, logsData] = await Promise.all([
-        agentsService.listAgents().catch(() => []),
-        devicesService.listDevices().catch(() => []),
-        vulnerabilitiesService.listVulnerabilities({ limit: 100 }).catch(() => []),
-        scansService.listScans().catch(() => []),
-        logsService.listLogs({ limit: 10 }).catch(() => []),
-      ]);
-
-      setAgents(agentsData);
-      setDevices(devicesData);
-      setVulns(vulnsData);
-      setScans(scansData);
-      setRecentLogs(logsData);
+      // 1. Preferred fast path: single consolidated request to avoid request flooding
+      const data = await dashboardService.getDashboard();
+      setAgents(data.agents || []);
+      setDevices(data.devices || []);
+      setVulns(data.vulnerabilities || []);
+      setScans(data.scans || []);
+      setRecentLogs(data.recent_logs || []);
       setLastRefreshed(new Date());
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load security monitoring statistics.');
+    } catch {
+      // 2. Resilient fallback: parallel fetch if consolidated endpoint is unavailable
+      try {
+        const [agentsData, devicesData, vulnsData, scansData, logsData] = await Promise.all([
+          agentsService.listAgents().catch(() => []),
+          devicesService.listDevices().catch(() => []),
+          vulnerabilitiesService.listVulnerabilities({ limit: 100 }).catch(() => []),
+          scansService.listScans().catch(() => []),
+          logsService.listLogs({ limit: 10 }).catch(() => []),
+        ]);
+
+        setAgents(agentsData);
+        setDevices(devicesData);
+        setVulns(vulnsData);
+        setScans(scansData);
+        setRecentLogs(logsData);
+        setLastRefreshed(new Date());
+      } catch (err: any) {
+        setError(err?.message || 'Failed to load security monitoring statistics.');
+      }
     } finally {
       setIsLoading(false);
     }

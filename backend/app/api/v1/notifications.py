@@ -78,15 +78,16 @@ async def get_unread_count(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Return count of unread notifications for current user."""
+    from sqlalchemy import func
     count = (
-        db.query(Notification)
+        db.query(func.count(Notification.id))
         .filter(
             Notification.organization_id == current_user.organization_id,
             (Notification.user_id == current_user.id) | (Notification.user_id == None),
             Notification.is_read == False,
         )
-        .count()
-    )
+        .scalar()
+    ) or 0
     return UnreadCountResponse(unread_count=count)
 
 

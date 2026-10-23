@@ -88,20 +88,34 @@ export async function apiFetch<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+  const signal = options.signal || controller.signal;
+
   const config: RequestInit = {
     ...options,
     headers,
+    signal,
   };
 
   let response: Response;
   try {
     response = await fetch(url, config);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new ApiError(
+        408,
+        'Request timeout: Server took too long to respond (cold start or slow network).',
+        'REQUEST_TIMEOUT'
+      );
+    }
     throw new ApiError(
       0,
       'Network error: Unable to reach the CyberShield AI backend. Verify server is running.',
       'NETWORK_ERROR'
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (response.status === 204) {
