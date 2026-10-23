@@ -8,6 +8,7 @@ into the devices table under the agent's organization.
 import logging
 from datetime import datetime, timezone
 from typing import Optional
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
 from app.models.agent import Agent
@@ -45,7 +46,7 @@ def process_discovery_result(db: Session, scan_result: ScanResult, agent: Agent)
         # Look up existing active device in the same organization
         existing = db.query(Device).filter(
             Device.organization_id == agent.organization_id,
-            Device.ip_address == str(ip),
+            cast(Device.ip_address, String) == str(ip),
             Device.deleted_at.is_(None)
         ).first()
 

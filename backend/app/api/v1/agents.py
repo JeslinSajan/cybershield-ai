@@ -19,6 +19,7 @@ from typing import Annotated, List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger("app.api.agents")
@@ -583,7 +584,7 @@ async def ingest_agent_logs(
         elif item.source_ip:
             matched_dev = db.query(Device).filter(
                 Device.organization_id == agent.organization_id,
-                Device.ip_address == item.source_ip,
+                cast(Device.ip_address, String) == str(item.source_ip),
                 Device.deleted_at.is_(None),
             ).first()
             if matched_dev:

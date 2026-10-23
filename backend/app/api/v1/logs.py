@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -53,7 +54,7 @@ async def list_logs(
     if username:
         query = query.filter(Log.username == username)
     if source_ip:
-        query = query.filter(Log.source_ip == source_ip)
+        query = query.filter(cast(Log.source_ip, String) == str(source_ip))
     if device_id:
         query = query.filter(Log.device_id == device_id)
     if agent_id:

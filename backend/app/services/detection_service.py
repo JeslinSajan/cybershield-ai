@@ -14,6 +14,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
 from app.models.alert import Alert
@@ -131,7 +132,7 @@ def create_alert(
             db.query(Device)
             .filter(
                 Device.organization_id == organization_id,
-                Device.ip_address == source_ip,
+                cast(Device.ip_address, String) == str(source_ip),
                 Device.deleted_at.is_(None),
             )
             .first()
@@ -168,7 +169,7 @@ def check_brute_force(
         db.query(Log)
         .filter(
             Log.organization_id == org_id,
-            Log.source_ip == source_ip,
+            cast(Log.source_ip, String) == str(source_ip),
             Log.event_type == "login_failure",
             Log.timestamp >= ten_minutes_ago,
         )
@@ -239,7 +240,7 @@ def check_suspicious_login(
         db.query(Log)
         .filter(
             Log.organization_id == org_id,
-            Log.source_ip == source_ip,
+            cast(Log.source_ip, String) == str(source_ip),
             Log.event_type == "login_failure",
             Log.timestamp >= one_hour_ago,
         )

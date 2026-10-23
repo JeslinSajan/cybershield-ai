@@ -1,6 +1,11 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
+# Prioritize agent/.env located next to this file, then fallback to current working directory
+_agent_env = Path(__file__).resolve().parent / ".env"
+if _agent_env.exists():
+    load_dotenv(dotenv_path=_agent_env)
 load_dotenv()
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
